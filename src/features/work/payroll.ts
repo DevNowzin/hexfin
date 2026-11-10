@@ -22,6 +22,8 @@ export interface WorkSettings {
   overrides: Record<string, DayMark>;
   /** Prêmio de assiduidade: entra no mês sem falta e sem atraso; uma falta ou um atraso tira o prêmio inteiro. */
   attendanceBonusCents: number;
+  /** Na empresa, atestado também tira a assiduidade (o dia continua pago). */
+  sickLosesBonus: boolean;
   /** Desconto por atraso (cada atraso). */
   latePenaltyCents: number;
   /** Quanto cai no dia 15 (o resto cai no último dia do mês). 100 = tudo no fim do mês. */
@@ -46,6 +48,7 @@ export function defaultWorkSettings(today: string): WorkSettings {
     cycle: [false, true, true, true, true, true, true],
     overrides: {},
     attendanceBonusCents: 0,
+    sickLosesBonus: false,
     latePenaltyCents: 0,
     firstPaymentPercent: 40,
     receivedEarly: [],
@@ -203,8 +206,9 @@ export function computeMonthPay(settings: WorkSettings, monthKey: string): Month
       pay.holidayExtraCents += Math.round((dayCents * settings.holidayBonusPercent) / 100);
     }
   }
-  pay.attendanceLost = settings.attendanceBonusCents > 0 && (pay.absences > 0 || pay.lates > 0);
-  pay.attendanceBonusCents = pay.absences > 0 || pay.lates > 0 ? 0 : settings.attendanceBonusCents;
+  const lost = pay.absences > 0 || pay.lates > 0 || (settings.sickLosesBonus && pay.sickDays > 0);
+  pay.attendanceLost = settings.attendanceBonusCents > 0 && lost;
+  pay.attendanceBonusCents = lost ? 0 : settings.attendanceBonusCents;
   pay.totalCents = Math.max(0, pay.baseCents + pay.holidayExtraCents + pay.attendanceBonusCents - pay.penaltiesCents);
   return pay;
 }
@@ -326,6 +330,7 @@ export function sanitizeWorkSettings(value: unknown, today: string): WorkSetting
     overrides,
     // Versão anterior guardava o "desconto por falta"; era o prêmio de assiduidade que se perde.
     attendanceBonusCents: int(raw.attendanceBonusCents ?? raw.absencePenaltyCents, 0, 100_000_00),
+    sickLosesBonus: raw.sickLosesBonus === true,
     latePenaltyCents: int(raw.latePenaltyCents, 0, 100_000_00),
     firstPaymentPercent: int(raw.firstPaymentPercent, base.firstPaymentPercent, 100),
     receivedEarly: Array.isArray(raw.receivedEarly) ? raw.receivedEarly.filter((item): item is string => typeof item === 'string' && /^\d{4}-\d{2}:[12]$/.test(item)) : [],

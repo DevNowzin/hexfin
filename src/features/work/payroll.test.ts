@@ -70,6 +70,13 @@ describe('computeMonthPay', () => {
     expect(computeMonthPay(sick, '2026-11')).toMatchObject({ workedDays: 25, sickDays: 1, attendanceBonusCents: 15000, totalCents: 231000 });
   });
 
+  it('atestado tira a assiduidade quando a empresa é assim (o dia continua pago)', () => {
+    const strict = settings({ attendanceBonusCents: 15000, sickLosesBonus: true, overrides: { '2026-11-04': 'sick' } });
+    expect(computeMonthPay(strict, '2026-11')).toMatchObject({ workedDays: 25, sickDays: 1, attendanceBonusCents: 0, attendanceLost: true, totalCents: 216000 });
+    expect(sanitizeWorkSettings({ sickLosesBonus: true }, '2026-11-10')?.sickLosesBonus).toBe(true);
+    expect(sanitizeWorkSettings({}, '2026-11-10')?.sickLosesBonus).toBe(false);
+  });
+
   it('atraso paga o dia, desconta o atraso e também tira a assiduidade', () => {
     const late = settings({ attendanceBonusCents: 15000, latePenaltyCents: 2000, overrides: { '2026-11-05': 'late' } });
     expect(computeMonthPay(late, '2026-11')).toMatchObject({ workedDays: 25, lates: 1, attendanceLost: true, penaltiesCents: 2000, totalCents: 214000 });

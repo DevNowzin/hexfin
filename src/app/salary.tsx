@@ -165,7 +165,7 @@ export default function SalaryScreen() {
               + R$ {formatAmountInput(String(pay.attendanceBonusCents))} de assiduidade
             </Text>
           ) : null}
-          {pay.absences > 0 || pay.lates > 0 ? (
+          {pay.absences > 0 || pay.lates > 0 || (pay.attendanceLost && pay.sickDays > 0) ? (
             <Text style={[styles.meta, { color: colors.expense, fontFamily: fonts.regular }]}>
               {[
                 pay.absences > 0 ? `${pay.absences} ${pay.absences === 1 ? 'falta (dia não pago)' : 'faltas (dias não pagos)'}` : null,
@@ -178,7 +178,7 @@ export default function SalaryScreen() {
           ) : null}
           {pay.sickDays > 0 ? (
             <Text style={[styles.meta, { color: colors.textMuted, fontFamily: fonts.regular }]}>
-              {pay.sickDays} {pay.sickDays === 1 ? 'atestado' : 'atestados'}: dia pago, sem desconto
+              {pay.sickDays} {pay.sickDays === 1 ? 'atestado' : 'atestados'}: dia pago{settings.sickLosesBonus ? '' : ', sem desconto'}
             </Text>
           ) : null}
           {payments.map((payment) => {
@@ -351,8 +351,22 @@ export default function SalaryScreen() {
           {moneyField('Desconto por atraso (R$)', settings.latePenaltyCents, (cents) => save({ latePenaltyCents: cents }))}
         </View>
         <Text style={[styles.hint, { color: colors.textMuted, fontFamily: fonts.regular }]}>
-          A assiduidade entra no mês sem falta e sem atraso; uma falta ou um atraso tira o prêmio inteiro. Falta não paga o dia. Atestado paga o dia e não tira nada.
+          A assiduidade entra no mês sem falta e sem atraso; uma falta ou um atraso tira o prêmio inteiro. Falta não paga o dia. Atestado sempre paga o dia.
         </Text>
+        <Card style={styles.holidayList}>
+          <View style={styles.holidayRow}>
+            <View style={styles.holidayInfo}>
+              <Text style={[styles.holidayName, { color: colors.text, fontFamily: fonts.medium }]}>Atestado tira a assiduidade</Text>
+              <Text style={[styles.meta, { color: colors.textMuted, fontFamily: fonts.regular }]}>Ligue se na sua empresa o atestado também faz perder o prêmio.</Text>
+            </View>
+            <Switch
+              accessibilityLabel="Atestado tira a assiduidade"
+              value={settings.sickLosesBonus}
+              onValueChange={(value) => save({ sickLosesBonus: value })}
+              trackColor={{ true: colors.primary, false: colors.border }}
+            />
+          </View>
+        </Card>
         <View style={styles.fieldRow}>
           {percentField('Adicional no feriado (%)', settings.holidayBonusPercent, 500, (value) => save({ holidayBonusPercent: value }))}
           <View style={styles.fieldHalf} />
