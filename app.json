@@ -2,7 +2,7 @@
   "expo": {
     "name": "HexFin",
     "slug": "hexfin",
-    "version": "1.2.1",
+    "version": "1.3.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "hexfin",
@@ -26,7 +26,7 @@
         "backgroundColor": "#09090B"
       },
       "predictiveBackGestureEnabled": false,
-      "versionCode": 10201
+      "versionCode": 10300
     },
     "web": {
       "favicon": "./assets/favicon.png",
