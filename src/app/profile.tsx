@@ -11,13 +11,16 @@ import { useAiSettings } from '@/features/ai/AiSettingsContext';
 import type { AiMode } from '@/features/ai/config';
 import { ASSISTANTS, isAssistantEnabled, toggleAssistant } from '@/features/finance/assistants';
 import { useFinance } from '@/features/finance/FinanceContext';
+import { getCurrentMonthKey } from '@/features/finance/selectors';
 import type { OpenFinanceSettings } from '@/features/openfinance/types';
 import { useOpenFinanceSettings } from '@/features/openfinance/useOpenFinanceSettings';
 import type { ThemePreference } from '@/features/finance/types';
 import { useSecurity } from '@/features/security/SecurityContext';
+import { computeMonthPay } from '@/features/work/payroll';
 import { CURRENT_VERSION, type UpdateState, useAppUpdate } from '@/features/update/useAppUpdate';
 import { useAppTheme } from '@/theme/AppTheme';
 import { confirmAction } from '@/utils/confirm';
+import { formatCurrency } from '@/utils/format';
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -56,7 +59,8 @@ function plural(count: number, one: string, many: string): string {
 }
 
 export default function ProfileScreen() {
-  const { profile, accounts, transactions, updateProfile, toggleBalances, clearData } = useFinance();
+  const { profile, accounts, transactions, updateProfile, toggleBalances, clearData, work } = useFinance();
+  const salaryTotal = work ? computeMonthPay(work, getCurrentMonthKey()).totalCents : 0;
   const { colors, fonts, preference, setPreference } = useAppTheme();
   const router = useRouter();
   const { settings } = useAiSettings();
@@ -155,6 +159,18 @@ export default function ProfileScreen() {
           <Text style={[styles.sectionHint, { color: colors.textMuted, fontFamily: fonts.regular }]}>
             Os ligados aparecem na aba Assistentes e no Início.
           </Text>
+        </View>
+
+        <View style={styles.section}>
+          <SectionHeader title="Trabalho" />
+          <Card style={styles.listCard}>
+            <ListRow
+              icon="time-outline"
+              title="Salário por hora"
+              subtitle={salaryTotal > 0 ? `${formatCurrency(salaryTotal)} previsto neste mês` : 'Escala, faltas, feriados e quinzenas'}
+              onPress={() => router.push('/salary')}
+            />
+          </Card>
         </View>
 
         <View style={styles.section}>

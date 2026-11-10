@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { mergeOpenFinance } from '@/features/openfinance/merge';
 import type { ImportReport, OpenFinanceSnapshot } from '@/features/openfinance/types';
 import { createId } from '@/utils/id';
+import type { WorkSettings } from '@/features/work/payroll';
 import { setBillMonthPaid } from './bills';
 import { createEmptyData, removeDemoData } from './defaults';
 import { loadFinanceData, saveFinanceData } from './storage';
@@ -31,6 +32,9 @@ interface FinanceContextValue extends FinanceData {
   deleteBill: (id: string) => void;
   /** "Já paguei" (true) ou "Ainda não" (false) para o vencimento do mês `monthKey`. */
   setBillPaid: (id: string, monthKey: string, paid: boolean) => void;
+  /** Salário por hora: configuração salva (ausente até configurar). */
+  work: WorkSettings | undefined;
+  saveWork: (settings: WorkSettings) => void;
   updateProfile: (patch: Partial<Profile>) => void;
   toggleBalances: () => void;
   clearData: () => void;
@@ -136,6 +140,10 @@ export function FinanceProvider({ children }: PropsWithChildren) {
     }));
   }, []);
 
+  const saveWork = useCallback((settings: WorkSettings) => {
+    setData((current) => ({ ...current, work: settings }));
+  }, []);
+
   const deleteBill = useCallback((id: string) => {
     setData((current) => ({ ...current, bills: (current.bills ?? []).filter((bill) => bill.id !== id) }));
   }, []);
@@ -152,7 +160,7 @@ export function FinanceProvider({ children }: PropsWithChildren) {
   }, []);
 
   const clearData = useCallback(() => {
-    setData((current) => ({ ...current, accounts: [], transactions: [], bills: [] }));
+    setData((current) => ({ ...current, accounts: [], transactions: [], bills: [], work: undefined }));
   }, []);
 
   const importOpenFinance = useCallback(
@@ -179,6 +187,8 @@ export function FinanceProvider({ children }: PropsWithChildren) {
       updateBill,
       deleteBill,
       setBillPaid,
+      work: data.work,
+      saveWork,
       updateProfile,
       toggleBalances,
       clearData,
@@ -197,6 +207,7 @@ export function FinanceProvider({ children }: PropsWithChildren) {
       updateBill,
       deleteBill,
       setBillPaid,
+      saveWork,
       updateProfile,
       toggleBalances,
       clearData,

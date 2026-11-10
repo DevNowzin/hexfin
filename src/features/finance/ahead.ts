@@ -1,5 +1,6 @@
 // O que ainda vai entrar e sair de hoje até o fim do mês (função pura, testada). É o resumo do Início.
 import { billStatusFor } from '@/features/openfinance/normalize';
+import { upcomingPayments } from '@/features/work/payroll';
 import { isBillMonthPaid, nextBillOccurrence, overdueBills } from './bills';
 import { getCardBill, isCardAccount, scopeOf } from './scope';
 import type { Account, FinanceData, Transaction } from './types';
@@ -9,7 +10,7 @@ export interface AheadItem {
   description: string;
   date: string;
   amountCents: number;
-  kind: 'transaction' | 'bill' | 'card';
+  kind: 'transaction' | 'bill' | 'card' | 'salary';
   /** Conta que venceu sem confirmação de pagamento. */
   overdue?: boolean;
 }
@@ -73,6 +74,13 @@ export function getMonthAhead(data: FinanceData, today: string): MonthAhead {
   }
 
   payable.push(...cardBillsAhead(data, today, until));
+
+  // Salário previsto pelas horas: só previsão, fora do saldo até cair de verdade.
+  if (data.work) {
+    for (const payment of upcomingPayments(data.work, today.slice(0, 7), today)) {
+      receivable.push({ id: `salary:${payment.id}`, description: payment.label, date: payment.date, amountCents: payment.amountCents, kind: 'salary' });
+    }
+  }
 
   const byDate = (a: AheadItem, b: AheadItem) => a.date.localeCompare(b.date);
   const total = (items: AheadItem[]) => items.reduce((sum, item) => sum + item.amountCents, 0);

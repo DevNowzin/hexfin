@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { defaultWorkSettings } from '@/features/work/payroll';
 import { getMonthAhead } from './ahead';
 import type { Account, FinanceData, PlannedBill, Transaction } from './types';
 
@@ -84,5 +85,18 @@ describe('contas vencidas no A pagar', () => {
     expect(ahead.payable).toEqual([{ id: 'bill:luz:2026-11', description: 'luz', date: '2026-11-05', amountCents: 5000, kind: 'bill', overdue: true }]);
     const confirmed = getMonthAhead(data([], [{ ...luz, paidMonths: ['2026-11'] }]), TODAY);
     expect(confirmed.payable).toEqual([]);
+  });
+});
+
+describe('salário previsto no A receber', () => {
+  it('as quinzenas que ainda vão cair entram como previstas; recebida antes sai', () => {
+    const work = { ...defaultWorkSettings(TODAY), hourlyRateCents: 1000 };
+    const ahead = getMonthAhead({ ...data([]), work }, TODAY);
+    expect(ahead.receivable.map((item) => [item.description, item.date, item.amountCents])).toEqual([
+      ['Salário · 1ª quinzena', '2026-11-14', 86400],
+      ['Salário · 2ª quinzena', '2026-11-28', 129600],
+    ]);
+    const early = getMonthAhead({ ...data([]), work: { ...work, receivedEarly: ['2026-11:1'] } }, TODAY);
+    expect(early.receivableCents).toBe(129600);
   });
 });

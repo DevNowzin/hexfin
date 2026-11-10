@@ -1,3 +1,5 @@
+import type { WorkSettings } from '@/features/work/payroll';
+
 export type TransactionType = 'income' | 'expense';
 export type TransactionStatus = 'completed' | 'pending';
 export type Recurrence = 'weekly' | 'monthly' | 'yearly';
@@ -98,6 +100,8 @@ export interface FinanceData {
   profile: Profile;
   /** Contas fixas e empréstimos cadastrados à mão. Ausente nos dados antigos. */
   bills?: PlannedBill[];
+  /** Salário por hora (escala, faltas, quinzenas). Ausente até o usuário configurar. */
+  work?: WorkSettings;
 }
 
 export type TransactionDraft = Omit<Transaction, 'id' | 'createdAt'>;

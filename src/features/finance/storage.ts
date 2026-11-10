@@ -1,4 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { sanitizeWorkSettings } from '@/features/work/payroll';
+import { toDateInput } from '@/utils/format';
 import { sanitizeBills } from './bills';
 import type { FinanceData } from './types';
 
@@ -21,7 +23,9 @@ export async function loadFinanceData(): Promise<FinanceData | null> {
   try {
     const parsed: unknown = JSON.parse(stored);
     if (!isFinanceData(parsed)) return null;
-    return parsed.bills === undefined ? parsed : { ...parsed, bills: sanitizeBills(parsed.bills) };
+    const { bills, work, ...rest } = parsed;
+    const cleanWork = work === undefined ? undefined : sanitizeWorkSettings(work, toDateInput());
+    return { ...rest, ...(bills === undefined ? {} : { bills: sanitizeBills(bills) }), ...(cleanWork ? { work: cleanWork } : {}) };
   } catch {
     return null;
   }
