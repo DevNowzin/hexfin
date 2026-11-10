@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "name": "HexFin",
+    "slug": "hexfin",
+    "version": "1.2.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "hexfin",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#09090B",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#09090B",
+      "imageWidth": 160
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.hexfin.app"
+    },
+    "android": {
+      "package": "com.hexfin.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#09090B"
+      },
+      "predictiveBackGestureEnabled": false,
+      "versionCode": 10200
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-web-browser",
+      "expo-secure-store",
+      "./plugins/withReleaseSigning"
+    ],
+    "experiments": {
+      "reactCompiler": true
+    },
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      }
+    }
+  }
+}

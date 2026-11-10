@@ -1,0 +1,39 @@
+node_modules/
+.expo/
+dist/
+*.log
+.DS_Store
+.tools/
+reference/
+*.apk
+*.apks
+*.hdcache
+server/.env
+
+# Assinatura do APK: nunca no Git (fica só no PC)
+credentials.json
+credentials/
+*.jks
+*.keystore
+keystore.properties
+
+# Projeto Android gerado pelo prebuild (o app.json é a fonte)
+android/
+ios/
+
+# APKs gerados no PC
+releases/
+
+# Capturas de verificação ficam só neste PC
+docs/screenshots/
+
+# Configuração local do Claude Code (não é código do app)
+.claude/
+
+# Fora do repositório público: documentação, instruções de agente e artes-fonte (ficam só no PC)
+AGENTS.md
+CLAUDE.md
+docs/
+assets/brand/*.svg
+assets/brand/*.gif
+scripts/generate-assets.ps1
