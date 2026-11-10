@@ -4,6 +4,8 @@
 import {
   addDays,
   connectorInfo,
+  MAX_LOGO_LOOKUPS,
+  pickConnectorLogo,
   finalizeCardTransactions,
   normalizeAccount,
   normalizeLoan,
@@ -182,10 +184,27 @@ async function syncItem(apiKey: string, itemId: string, windowStart: string, dep
 }
 
 /** Busca tudo de todos os Items. Nunca lança: falhas viram `{ ok: false }`. `today` em `YYYY-MM-DD`. */
+/** Logo de cada banco pelo nome (`GET /connectors?name=`). Falha em um nome não impede a sincronização. */
+async function fetchBankLogos(apiKey: string, names: string[], deps: OpenFinanceDeps): Promise<Record<string, string>> {
+  const logos: Record<string, string> = {};
+  for (const name of names.slice(0, MAX_LOGO_LOOKUPS)) {
+    try {
+      const logo = pickConnectorLogo(await fetchList(`/connectors?name=${encodeURIComponent(name)}`, apiKey, deps), name);
+      if (logo) logos[name] = logo;
+    } catch (error) {
+      if (error instanceof OpenFinanceError && error.code === 'cancelled') throw error;
+      console.warn(`Logo de ${name} não veio`, error);
+    }
+  }
+  return logos;
+}
+
+/** `logoNames`: instituições que a pessoa escreveu nas contas e ainda estão sem logo (`institutionsNeedingLogo`). */
 export async function syncOpenFinance(
   settings: Pick<OpenFinanceSettings, 'clientId' | 'clientSecret' | 'itemIds' | 'consentedAt'>,
   today: string,
   deps: OpenFinanceDeps = {},
+  logoNames: string[] = [],
 ): Promise<SyncOutcome> {
   if (!settings.consentedAt || validateOpenFinanceSettings(settings)) return { ok: false, error: 'not_configured' };
   const windowStart = addDays(today, -SYNC_WINDOW_DAYS);
@@ -199,6 +218,8 @@ export async function syncOpenFinance(
       snapshot.accounts.push(...result.accounts);
       snapshot.loans.push(...result.loans);
     }
+    currentItem = undefined;
+    if (logoNames.length > 0) snapshot.bankLogos = await fetchBankLogos(apiKey, logoNames, deps);
     return { ok: true, snapshot };
   } catch (error) {
     const code = error instanceof OpenFinanceError ? error.code : 'server';

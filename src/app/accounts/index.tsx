@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { AccountLogo } from '@/components/AccountLogo';
+import { accountLogoUrl } from '@/features/openfinance/normalize';
 import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AmountText } from '@/components/AmountText';
@@ -48,7 +49,7 @@ export default function AccountsScreen() {
               return (
                 <Pressable key={account.id} accessibilityRole="button" accessibilityLabel={`Editar conta ${account.name}`} onPress={() => router.push(`/accounts/${account.id}/edit`)} style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}>
                   <Card style={styles.accountCard}>
-                    <AccountLogo color={account.color} icon={account.icon} logoUrl={account.logoUrl} />
+                    <AccountLogo color={account.color} icon={account.icon} logoUrl={accountLogoUrl(account)} />
                     <View style={styles.accountContent}>
                       <Text style={[styles.institution, { color: colors.textMuted, fontFamily: fonts.regular }]}>{account.institution}</Text>
                       <Text style={[styles.accountName, { color: colors.text, fontFamily: fonts.semiBold }]}>{account.name}</Text>

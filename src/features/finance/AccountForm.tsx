@@ -9,7 +9,7 @@ import { Screen } from '@/components/Screen';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { useAppTheme } from '@/theme/AppTheme';
 import { amountInputToCents, centsToAmountInput, formatAmountInput } from '@/utils/format';
-import { billCycleFromRule, billRuleOf, MAX_CLOSE_OFFSET_DAYS } from '@/features/openfinance/normalize';
+import { accountLogoUrl, billCycleFromRule, billRuleOf, isAggregator, MAX_CLOSE_OFFSET_DAYS } from '@/features/openfinance/normalize';
 import { toDateInput } from '@/utils/format';
 import { useFinance } from './FinanceContext';
 import type { Account, AccountType } from './types';
@@ -75,7 +75,7 @@ export function AccountForm({ account, canDelete = false, onDelete }: AccountFor
       <ScreenHeader title={account ? 'Editar conta' : 'Nova conta'} showBack />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <Card style={styles.previewCard}>
-          <AccountLogo color={color} icon={icon} logoUrl={account?.logoUrl} size={52} />
+          <AccountLogo color={color} icon={icon} logoUrl={account && account.institution === institution ? accountLogoUrl(account) : undefined} size={52} />
           <Text style={[styles.previewInstitution, { color: colors.textMuted, fontFamily: fonts.regular }]}>{institution || 'Instituição'}</Text>
           <Text style={[styles.previewName, { color: colors.text, fontFamily: fonts.semiBold }]}>{name || 'Nome da conta'}</Text>
         </Card>
@@ -144,6 +144,7 @@ export function AccountForm({ account, canDelete = false, onDelete }: AccountFor
         {account?.externalId ? (
           <Text style={[styles.hint, styles.field, { color: colors.textMuted, fontFamily: fonts.regular }]}>
             Conta do Open Finance: o tipo e o saldo vêm do banco a cada sincronização. Aqui você muda só o nome, a instituição, o ícone e a cor.
+            {isAggregator(account.institution) ? ' Escreva o nome do banco (ex.: Nubank) em Instituição: o logo dele vem na próxima sincronização.' : ''}
           </Text>
         ) : (
         <>
@@ -189,7 +190,7 @@ export function AccountForm({ account, canDelete = false, onDelete }: AccountFor
 
         <View style={styles.field}>
           <Text style={[styles.label, { color: colors.textMuted, fontFamily: fonts.medium }]}>Ícone</Text>
-          {account?.logoUrl ? <Text style={[styles.hint, styles.iconHint, { color: colors.textMuted, fontFamily: fonts.regular }]}>O logo do banco aparece no lugar do ícone.</Text> : null}
+          {account && accountLogoUrl(account) ? <Text style={[styles.hint, styles.iconHint, { color: colors.textMuted, fontFamily: fonts.regular }]}>O logo do banco aparece no lugar do ícone.</Text> : null}
           <View style={styles.colorOptions}>
             {ACCOUNT_ICONS.map((item) => {
               const active = icon === item.name;

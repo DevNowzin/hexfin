@@ -60,6 +60,8 @@ export interface OpenFinanceSnapshot {
   /** Dia da sincronização: o saldo é ancorado com o que já aconteceu até ele. */
   today: string;
   accounts: SnapshotAccount[];
+  /** Logo de cada banco pelo nome da instituição (`/connectors?name=`), para contas vindas por agregador como o MeuPluggy. */
+  bankLogos?: Record<string, string>;
   loans: SnapshotLoan[];
   /** Avisos para a tela (ex.: empréstimos indisponíveis por esta conexão). */
   warnings: string[];

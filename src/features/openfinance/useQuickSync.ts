@@ -3,7 +3,7 @@ import { useFinance } from '@/features/finance/FinanceContext';
 import { OPEN_FINANCE_ERROR_MESSAGES, syncOpenFinance } from '@/services/openFinance';
 import { toDateInput } from '@/utils/format';
 import { describeImport } from './merge';
-import { validateOpenFinanceSettings } from './normalize';
+import { institutionsNeedingLogo, validateOpenFinanceSettings } from './normalize';
 import type { OpenFinanceSettings } from './types';
 
 export interface QuickSyncMessage {
@@ -16,7 +16,7 @@ export interface QuickSyncMessage {
  * autorização, `ready` é falso e a tela leva para o Open Finance em vez de sincronizar.
  */
 export function useQuickSync(settings: OpenFinanceSettings, save: (next: OpenFinanceSettings) => Promise<void>) {
-  const { importOpenFinance } = useFinance();
+  const { importOpenFinance, accounts } = useFinance();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<QuickSyncMessage | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
@@ -31,7 +31,7 @@ export function useQuickSync(settings: OpenFinanceSettings, save: (next: OpenFin
     const controller = new AbortController();
     controllerRef.current = controller;
     try {
-      const outcome = await syncOpenFinance(settings, toDateInput(), { signal: controller.signal });
+      const outcome = await syncOpenFinance(settings, toDateInput(), { signal: controller.signal }, institutionsNeedingLogo(accounts));
       if (controller.signal.aborted) return;
       if (!outcome.ok) {
         setMessage({ text: OPEN_FINANCE_ERROR_MESSAGES[outcome.error], tone: 'error' });
@@ -45,7 +45,7 @@ export function useQuickSync(settings: OpenFinanceSettings, save: (next: OpenFin
     } finally {
       if (!controller.signal.aborted) setBusy(false);
     }
-  }, [ready, busy, settings, save, importOpenFinance]);
+  }, [ready, busy, settings, save, importOpenFinance, accounts]);
 
   const dismiss = useCallback(() => setMessage(null), []);
   return { ready, busy, message, sync, dismiss };

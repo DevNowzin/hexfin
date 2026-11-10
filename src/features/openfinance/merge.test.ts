@@ -240,3 +240,22 @@ describe('ciclo do cartão informado pela pessoa', () => {
     expect([byExternal(again, 'pluggy:c1').billMonth, byExternal(again, 'pluggy:c2').billMonth]).toEqual(['2026-12', '2027-01']);
   });
 });
+
+describe('logo do banco pelo nome que a pessoa escreveu', () => {
+  it('conta do MeuPluggy renomeada para Nubank recebe o logo do Nubank na sincronização', () => {
+    const logo = 'https://cdn.pluggy.ai/assets/connector-icons/212.svg';
+    const first = mergeOpenFinance(empty(), snapshot([account('k1', 'credit', 1000, [])]), NOW, ids()).data;
+    const renamed = { ...first, accounts: first.accounts.map((item) => ({ ...item, institution: 'Nubank' })) };
+    const synced = mergeOpenFinance(renamed, snapshot([account('k1', 'credit', 1000, [])], { bankLogos: { Nubank: logo } }), NOW, ids()).data;
+    expect(synced.accounts[0]).toMatchObject({ institution: 'Nubank', logoUrl: logo, logoFor: 'Nubank' });
+  });
+
+  it('o logo do conector não volta para a conta que a pessoa renomeou', () => {
+    const connectorLogo = 'https://cdn.pluggy.ai/banco-x.svg';
+    const first = mergeOpenFinance(empty(), snapshot([{ ...account('k1', 'checking', 1000, []), logoUrl: connectorLogo }]), NOW, ids()).data;
+    expect(first.accounts[0]).toMatchObject({ logoUrl: connectorLogo, logoFor: 'Banco X' });
+    const renamed = { ...first, accounts: first.accounts.map((item) => ({ ...item, institution: 'Outro' })) };
+    const synced = mergeOpenFinance(renamed, snapshot([{ ...account('k1', 'checking', 1000, []), logoUrl: connectorLogo }]), NOW, ids()).data;
+    expect(synced.accounts[0]!.logoFor).toBe('Banco X');
+  });
+});

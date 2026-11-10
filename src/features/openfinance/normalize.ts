@@ -301,8 +301,45 @@ export function normalizeLoan(raw: unknown, itemId: string, institution: string)
 export function connectorInfo(item: unknown): { institution: string; logoUrl?: string } {
   const connector = isRecord(item) && isRecord(item.connector) ? item.connector : {};
   const institution = text(connector.name) || 'Open Finance';
-  const image = text(connector.imageUrl);
-  return image.startsWith('https://') && image.length <= 500 ? { institution, logoUrl: image } : { institution };
+  // O MeuPluggy junta vários bancos: o logo dele não é o do banco da conta.
+  const logoUrl = isAggregator(institution) ? undefined : safeLogo(connector.imageUrl);
+  return logoUrl ? { institution, logoUrl } : { institution };
+}
+
+function safeLogo(value: unknown): string | undefined {
+  const image = text(value);
+  return image.startsWith('https://') && image.length <= 500 ? image : undefined;
+}
+
+/** Conector que agrega bancos (MeuPluggy): o nome e o logo não são os do banco. */
+export function isAggregator(institution: string): boolean {
+  return /^\s*(meu\s*pluggy|open finance)\s*$/i.test(institution);
+}
+
+function sameName(a: string, b: string): boolean {
+  const clean = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+  return clean(a) === clean(b);
+}
+
+/** Logo do conector cujo nome é igual ao da instituição (sem diferenciar maiúsculas e acentos). */
+export function pickConnectorLogo(results: unknown[], institution: string): string | undefined {
+  const match = results.find((item) => isRecord(item) && sameName(text(item.name), institution));
+  return isRecord(match) ? safeLogo(match.imageUrl) : undefined;
+}
+
+export const MAX_LOGO_LOOKUPS = 5;
+
+/** Instituições das contas importadas que ainda não têm o logo certo (ex.: a pessoa escreveu "Nubank" no lugar de "MeuPluggy"). */
+export function institutionsNeedingLogo(accounts: Array<{ externalId?: string; institution: string; logoFor?: string }>): string[] {
+  const names = accounts
+    .filter((account) => account.externalId && account.institution.trim() && !isAggregator(account.institution) && account.logoFor !== account.institution)
+    .map((account) => account.institution);
+  return [...new Set(names)].slice(0, MAX_LOGO_LOOKUPS);
+}
+
+/** Logo que vale para a conta: só o buscado para a instituição que ela tem agora. */
+export function accountLogoUrl(account: { institution: string; logoUrl?: string; logoFor?: string }): string | undefined {
+  return account.logoUrl && account.logoFor === account.institution ? account.logoUrl : undefined;
 }
 
 /** Lista `results` de uma resposta paginada do Pluggy; null quando o formato não bate. */

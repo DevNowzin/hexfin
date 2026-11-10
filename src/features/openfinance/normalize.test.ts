@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  accountLogoUrl,
+  institutionsNeedingLogo,
+  pickConnectorLogo,
   billCycleFromRule,
   billRuleOf,
   connectorInfo,
@@ -262,5 +265,37 @@ describe('ciclo informado pela pessoa (banco sem fechamento e vencimento)', () =
     expect(billCycleFromRule(32, 7, '2026-11-10')).toBeNull();
     expect(billCycleFromRule(5, 0, '2026-11-10')).toBeNull();
     expect(billCycleFromRule(5, 21, '2026-11-10')).toBeNull();
+  });
+});
+
+describe('logo do banco pelo nome da instituição', () => {
+  const NUBANK_LOGO = 'https://cdn.pluggy.ai/assets/connector-icons/212.svg';
+
+  it('MeuPluggy agrega bancos: o logo dele não vale para a conta', () => {
+    expect(connectorInfo({ connector: { name: 'MeuPluggy', imageUrl: 'https://cdn.pluggy.ai/meupluggy.svg' } })).toEqual({ institution: 'MeuPluggy' });
+  });
+
+  it('escolhe o conector de nome igual, sem diferenciar maiúsculas e acentos', () => {
+    const results = [{ name: 'Nubank Empresas', imageUrl: 'https://x/emp.svg' }, { name: 'Nubank', imageUrl: NUBANK_LOGO }];
+    expect(pickConnectorLogo(results, 'nubank')).toBe(NUBANK_LOGO);
+    expect(pickConnectorLogo([{ name: 'Itaú', imageUrl: 'https://x/itau.svg' }], 'Itau')).toBe('https://x/itau.svg');
+    expect(pickConnectorLogo(results, 'Inter')).toBeUndefined();
+  });
+
+  it('busca só para contas importadas, com nome de banco escrito e sem logo dessa instituição', () => {
+    const accounts = [
+      { externalId: 'pluggy:1', institution: 'MeuPluggy' },
+      { externalId: 'pluggy:2', institution: 'Nubank' },
+      { externalId: 'pluggy:3', institution: 'Nubank' },
+      { externalId: 'pluggy:4', institution: 'Inter', logoFor: 'Inter', logoUrl: 'https://x/inter.svg' },
+      { institution: 'Carteira' },
+    ];
+    expect(institutionsNeedingLogo(accounts)).toEqual(['Nubank']);
+  });
+
+  it('renomear a instituição esconde o logo antigo', () => {
+    expect(accountLogoUrl({ institution: 'Nubank', logoUrl: NUBANK_LOGO, logoFor: 'Nubank' })).toBe(NUBANK_LOGO);
+    expect(accountLogoUrl({ institution: 'Inter', logoUrl: NUBANK_LOGO, logoFor: 'Nubank' })).toBeUndefined();
+    expect(accountLogoUrl({ institution: 'MeuPluggy', logoUrl: 'https://cdn.pluggy.ai/meupluggy.svg' })).toBeUndefined();
   });
 });

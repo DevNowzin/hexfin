@@ -126,3 +126,25 @@ describe('syncOpenFinance', () => {
     expect(outcome.ok && outcome.snapshot.warnings).toEqual(['1 registro de MeuPluggy ficou de fora por formato inesperado.']);
   });
 });
+
+describe('logo do banco pelo nome', () => {
+  it('pede /connectors?name= para cada instituição e devolve o logo de nome igual', async () => {
+    const pluggy = fakePluggy({
+      '/connectors': (url) =>
+        url.searchParams.get('name') === 'Nubank'
+          ? json({ results: [{ name: 'Nubank', imageUrl: 'https://cdn.pluggy.ai/assets/connector-icons/212.svg' }] })
+          : json({ message: 'falhou' }, 500),
+    });
+    const outcome = await syncOpenFinance(settings, '2026-11-10', { fetchImpl: pluggy.fetchImpl }, ['Nubank', 'Inter']);
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(pluggy.calls.map((call) => call.path)).toContain('/connectors?name=Nubank');
+    expect(outcome.snapshot.bankLogos).toEqual({ Nubank: 'https://cdn.pluggy.ai/assets/connector-icons/212.svg' });
+  });
+
+  it('sem nomes, não chama /connectors', async () => {
+    const pluggy = fakePluggy();
+    await syncOpenFinance(settings, '2026-11-10', { fetchImpl: pluggy.fetchImpl });
+    expect(pluggy.calls.some((call) => call.path.startsWith('/connectors'))).toBe(false);
+  });
+});

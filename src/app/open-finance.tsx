@@ -8,7 +8,7 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import { SectionHeader } from '@/components/SectionHeader';
 import { useFinance } from '@/features/finance/FinanceContext';
 import { describeImport } from '@/features/openfinance/merge';
-import { parseItemIds, validateOpenFinanceSettings } from '@/features/openfinance/normalize';
+import { institutionsNeedingLogo, parseItemIds, validateOpenFinanceSettings } from '@/features/openfinance/normalize';
 import type { OpenFinanceSettings } from '@/features/openfinance/types';
 import { useOpenFinanceSettings } from '@/features/openfinance/useOpenFinanceSettings';
 import { OPEN_FINANCE_ERROR_MESSAGES, SYNC_WINDOW_DAYS, syncOpenFinance } from '@/services/openFinance';
@@ -34,7 +34,7 @@ function formatSyncDate(iso: string): string {
 
 export default function OpenFinanceScreen() {
   const { settings, hydrated, loadError, save, clear } = useOpenFinanceSettings();
-  const { importOpenFinance } = useFinance();
+  const { importOpenFinance, accounts } = useFinance();
   const { colors, fonts } = useAppTheme();
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
@@ -93,7 +93,7 @@ export default function OpenFinanceScreen() {
     controllerRef.current = controller;
     try {
       await save(next);
-      const outcome = await syncOpenFinance(next, toDateInput(), { signal: controller.signal });
+      const outcome = await syncOpenFinance(next, toDateInput(), { signal: controller.signal }, institutionsNeedingLogo(accounts));
       if (controller.signal.aborted) return;
       if (!outcome.ok) {
         const detail = outcome.itemId ? ` (${outcome.itemId.slice(0, 8)}…)` : '';

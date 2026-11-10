@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AmountText } from '@/components/AmountText';
 import { AccountLogo } from '@/components/AccountLogo';
+import { accountLogoUrl } from '@/features/openfinance/normalize';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { CashFlowChart } from '@/components/CashFlowChart';
@@ -193,7 +194,7 @@ export default function HomeScreen() {
                       key={account.id}
                       color={account.color}
                       icon={account.icon}
-                      logoUrl={account.logoUrl}
+                      logoUrl={accountLogoUrl(account)}
                       initial={account.institution.charAt(0).toLocaleUpperCase('pt-BR')}
                       size={40}
                       style={[styles.badge, { borderColor: colors.surface, marginLeft: index === 0 ? 0 : -12 }]}

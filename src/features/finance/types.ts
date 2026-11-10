@@ -29,6 +29,8 @@ export interface Account {
   icon?: string;
   /** Logo do banco, vindo do conector do Open Finance (só `https`). */
   logoUrl?: string;
+  /** Instituição para a qual o logo foi buscado: renomear a instituição esconde o logo até a próxima sincronização. */
+  logoFor?: string;
 }
 
 export interface Transaction {

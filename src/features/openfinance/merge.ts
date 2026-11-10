@@ -40,11 +40,13 @@ function upsertAccount(accounts: Account[], target: Target, createId: IdFactory,
   const index = accounts.findIndex((account) => account.externalId === target.externalId);
   const existing = accounts[index];
   if (existing) {
+    // Logo do conector só se a pessoa não renomeou a instituição.
+    const keepsInstitution = existing.institution === target.institution;
     const updated = {
       ...existing,
       type: target.type,
       ...(target.billCycle ? { billCycle: target.billCycle } : {}),
-      ...(target.logoUrl ? { logoUrl: target.logoUrl } : {}),
+      ...(target.logoUrl && keepsInstitution ? { logoUrl: target.logoUrl, logoFor: target.institution } : {}),
     };
     accounts[index] = updated;
     report.accountsUpdated += 1;
@@ -59,7 +61,7 @@ function upsertAccount(accounts: Account[], target: Target, createId: IdFactory,
     openingBalanceCents: 0,
     externalId: target.externalId,
     ...(target.billCycle ? { billCycle: target.billCycle } : {}),
-    ...(target.logoUrl ? { logoUrl: target.logoUrl } : {}),
+    ...(target.logoUrl ? { logoUrl: target.logoUrl, logoFor: target.institution } : {}),
   };
   accounts.push(created);
   report.accountsAdded += 1;
@@ -205,7 +207,10 @@ export function mergeOpenFinance(
     ...synced.map(({ source, account }) => [account.id, source.kind === 'credit' ? -source.bankBalanceCents : source.bankBalanceCents] as const),
     ...loans.map(({ account, balanceCents }) => [account.id, balanceCents] as const),
   ]);
-  const anchored = accounts.map((account) => {
+  const logos = snapshot.bankLogos ?? {};
+  const anchored = accounts.map((current) => {
+    const bankLogo = current.externalId ? logos[current.institution] : undefined;
+    const account = bankLogo ? { ...current, logoUrl: bankLogo, logoFor: current.institution } : current;
     const target = targets.get(account.id);
     if (target === undefined) return account;
     const movement = getAccountBalance({ ...account, openingBalanceCents: 0 }, transactions, snapshot.today);
