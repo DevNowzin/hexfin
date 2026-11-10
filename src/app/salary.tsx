@@ -10,7 +10,7 @@ import { SectionHeader } from '@/components/SectionHeader';
 import { useFinance } from '@/features/finance/FinanceContext';
 import { getCurrentMonthKey } from '@/features/finance/selectors';
 import {
-  CYCLE_LENGTHS,
+  buildCycle,
   computeMonthPay,
   dayMark,
   daysOfMonth,
@@ -18,7 +18,8 @@ import {
   holidaysOf,
   monthPayments,
   nextDayMark,
-  resizeCycle,
+  cyclePattern,
+  MAX_CYCLE_PART,
   toggleCycleDay,
   type DayMark,
   type WorkSettings,
@@ -56,6 +57,11 @@ export default function SalaryScreen() {
   const [mode, setMode] = useState<Mode>('cycle');
   const [shiftText, setShiftText] = useState(minutesToHours(settings.shiftMinutes));
   const [lunchText, setLunchText] = useState(String(settings.lunchMinutes));
+  const pattern = cyclePattern(settings.cycle);
+  const [workDaysText, setWorkDaysText] = useState(String(pattern?.[0] ?? 6));
+  const [offDaysText, setOffDaysText] = useState(String(pattern?.[1] ?? 1));
+  // Depois de "Aplicar", o próximo toque no calendário marca o 1º dia de trabalho do ciclo.
+  const [pickingStart, setPickingStart] = useState(false);
 
   const save = (patch: Partial<WorkSettings>) => saveWork({ ...settings, ...patch });
   const pay = computeMonthPay(settings, monthKey);
@@ -77,7 +83,28 @@ export default function SalaryScreen() {
   }
 
   function tapDay(day: string) {
+    if (pickingStart) {
+      saveWork(buildCycle(settings, Number(workDaysText || '1'), Number(offDaysText || '0'), day));
+      setPickingStart(false);
+      return;
+    }
     saveWork(mode === 'cycle' ? toggleCycleDay(settings, day) : nextDayMark(settings, day));
+  }
+
+  function daysField(label: string, value: string, onChange: (text: string) => void) {
+    return (
+      <View style={styles.fieldHalf}>
+        <Text style={labelStyle}>{label}</Text>
+        <TextInput
+          accessibilityLabel={label}
+          value={value}
+          onChangeText={(text) => onChange(text.replace(/D/g, '').slice(0, 2))}
+          keyboardType="number-pad"
+          selectionColor={colors.primary}
+          style={inputStyle}
+        />
+      </View>
+    );
   }
 
   function moneyField(label: string, cents: number, onChange: (cents: number) => void) {
@@ -182,28 +209,23 @@ export default function SalaryScreen() {
         </View>
         <Text style={[styles.hint, { color: colors.textMuted, fontFamily: fonts.regular }]}>
           {mode === 'cycle'
-            ? `Toque nos dias para trocar trabalho e folga. A escala de ${settings.cycle.length} dias se repete pelo resto do ano.`
+            ? `Escala ${pattern ? `${pattern[0]}x${pattern[1]}` : 'personalizada'} (ciclo de ${settings.cycle.length} dias), repetida pelo resto do ano. Ex.: 6x2 = trabalha 6, folga 2, e a folga anda um dia por semana. Toque num dia para trocar só aquela posição do ciclo.`
             : 'Toque num dia para marcar atraso, falta, atestado ou folga só naquele dia. Mais um toque volta para a escala.'}
         </Text>
         {mode === 'cycle' ? (
-          <View style={styles.chips}>
-            {CYCLE_LENGTHS.map((length) => {
-              const active = settings.cycle.length === length;
-              return (
-                <Pressable
-                  key={length}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                  onPress={() => (active ? undefined : saveWork(resizeCycle(settings, length, today)))}
-                  style={[styles.chip, { backgroundColor: active ? colors.text : colors.surface, borderColor: active ? colors.text : colors.border }]}
-                >
-                  <Text style={[styles.chipText, { color: active ? colors.background : colors.textMuted, fontFamily: fonts.medium }]}>
-                    {length === 2 ? 'Ciclo de 2 dias (12x36)' : `Ciclo de ${length} dias`}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <>
+            <View style={styles.fieldRow}>
+              {daysField('Trabalho (dias seguidos)', workDaysText, setWorkDaysText)}
+              {daysField('Folgo (dias seguidos)', offDaysText, setOffDaysText)}
+            </View>
+            <Button
+              label={pickingStart ? 'Toque no seu 1º dia de trabalho' : `Aplicar escala ${workDaysText || 1}x${offDaysText || 0}`}
+              icon={pickingStart ? 'hand-left-outline' : 'calendar-outline'}
+              variant={pickingStart ? 'primary' : 'secondary'}
+              onPress={() => setPickingStart(!pickingStart)}
+              disabled={Number(workDaysText || '0') < 1 || Number(workDaysText) > MAX_CYCLE_PART || Number(offDaysText || '0') > MAX_CYCLE_PART}
+            />
+          </>
         ) : null}
 
         <Card style={styles.calendar}>

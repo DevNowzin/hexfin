@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addDays,
   adjustPayday,
+  buildCycle,
+  cyclePattern,
   computeMonthPay,
   defaultWorkSettings,
   easterSunday,
   holidaysOf,
   monthPayments,
   nextDayMark,
-  resizeCycle,
   sanitizeWorkSettings,
   scheduledWork,
   toggleCycleDay,
@@ -99,9 +101,27 @@ describe('escala no calendário', () => {
     expect(scheduledWork(saturdayOff, '2026-12-19')).toBe(false);
   });
 
-  it('12x36: ciclo de 2 dias alterna trabalho e folga', () => {
-    const shift = toggleCycleDay(resizeCycle(settings(), 2, '2026-11-10'), '2026-11-11');
+  it('12x36 é 1x1: alterna trabalho e folga', () => {
+    const shift = buildCycle(settings(), 1, 1, '2026-11-10');
     expect(['2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13'].map((day) => scheduledWork(shift, day))).toEqual([true, false, true, false]);
+  });
+
+  it('6x2: trabalha 6, folga 2 e a folga anda um dia por semana', () => {
+    const six = buildCycle(settings(), 6, 2, '2026-11-10');
+    const week = (from: string) => Array.from({ length: 8 }, (_, index) => scheduledWork(six, addDays(from, index)));
+    expect(week('2026-11-10')).toEqual([true, true, true, true, true, true, false, false]);
+    // Folgas: 16 e 17/11 (seg e ter), depois 24 e 25/11 (ter e qua), 02 e 03/12 (qua e qui)...
+    expect(['2026-11-16', '2026-11-17', '2026-11-24', '2026-11-25', '2026-12-02', '2026-12-03'].every((day) => !scheduledWork(six, day))).toBe(true);
+    expect(scheduledWork(six, '2026-11-23')).toBe(true);
+    // Antes do 1º dia tocado a escala vale para trás: 08 e 09/11 foram folga.
+    expect([scheduledWork(six, '2026-11-08'), scheduledWork(six, '2026-11-09')]).toEqual([false, false]);
+    expect(cyclePattern(six.cycle)).toEqual([6, 2]);
+  });
+
+  it('reconhece a escala N x M e a personalizada', () => {
+    expect(cyclePattern(settings().cycle)).toBeNull();
+    expect(cyclePattern([true, true, true, true, true, false, false])).toEqual([5, 2]);
+    expect(cyclePattern([true, true])).toEqual([2, 0]);
   });
 
   it('toque no dia: trabalho → atraso → falta → atestado → folga → volta para a escala', () => {

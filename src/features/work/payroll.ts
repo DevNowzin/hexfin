@@ -28,7 +28,7 @@ export interface WorkSettings {
   receivedEarly: string[];
 }
 
-export const CYCLE_LENGTHS = [7, 14, 2] as const;
+export const MAX_CYCLE_PART = 14;
 
 /** Escala inicial: segunda a sábado, folga no domingo (ciclo de 7 dias começando num domingo). */
 export function defaultWorkSettings(today: string): WorkSettings {
@@ -241,9 +241,21 @@ export function toggleCycleDay(settings: WorkSettings, day: string): WorkSetting
   return { ...settings, cycle };
 }
 
-/** Novo tamanho de ciclo, começando hoje, com todos os dias de trabalho (o usuário marca as folgas). */
-export function resizeCycle(settings: WorkSettings, length: number, today: string): WorkSettings {
-  return { ...settings, cycle: Array.from({ length }, () => true), cycleStart: today };
+/**
+ * Escala "trabalho N, folgo M" (ex.: 6x2 = ciclo de 8 dias, a folga anda um dia por semana; 12x36 = 1x1)
+ * começando no 1º dia de trabalho que o usuário tocou no calendário.
+ */
+export function buildCycle(settings: WorkSettings, workDays: number, offDays: number, firstWorkDay: string): WorkSettings {
+  const work = Math.min(MAX_CYCLE_PART, Math.max(1, Math.round(workDays)));
+  const off = Math.min(MAX_CYCLE_PART, Math.max(0, Math.round(offDays)));
+  return { ...settings, cycle: [...Array.from({ length: work }, () => true), ...Array.from({ length: off }, () => false)], cycleStart: firstWorkDay };
+}
+
+/** A escala é "N dias de trabalho seguidos de M de folga"? Devolve [N, M]; senão (personalizada), null. */
+export function cyclePattern(cycle: boolean[]): [number, number] | null {
+  const work = cycle.indexOf(false) === -1 ? cycle.length : cycle.indexOf(false);
+  const rest = cycle.slice(work);
+  return work > 0 && rest.every((works) => !works) ? [work, rest.length] : null;
 }
 
 /** Lê o que foi salvo; campo ausente ou inválido volta ao padrão. */
