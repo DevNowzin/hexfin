@@ -70,6 +70,16 @@ function sameContent(a: Transaction, b: Transaction): boolean {
   );
 }
 
+/**
+ * O Pluggy marca como `PENDING` lançamentos da conta que o banco ainda não "fechou", mesmo com o
+ * dinheiro já fora da conta. Na conta, com data até hoje, conta como feito. Cartão e datas futuras
+ * (agendamentos) seguem o status do banco.
+ */
+export function importedStatus(item: SnapshotTransaction, kind: AccountType, today: string): Transaction['status'] {
+  if (item.status === 'pending' && kind !== 'credit' && item.date <= today) return 'completed';
+  return item.status;
+}
+
 function buildTransaction(
   source: SnapshotTransaction,
   accountId: string,
@@ -157,7 +167,8 @@ export function mergeOpenFinance(
     for (const item of source.transactions) {
       if (source.kind === 'credit' && item.cardPayment) continue;
       const previous = previousByExternalId.get(item.externalId);
-      const transaction = buildTransaction(item, account.id, cardAccountId, previous, createId, now);
+      const status = importedStatus(item, source.kind, snapshot.today);
+      const transaction = buildTransaction({ ...item, status }, account.id, cardAccountId, previous, createId, now);
       if (!previous) report.transactionsAdded += 1;
       else if (!sameContent(previous, transaction)) report.transactionsUpdated += 1;
       fresh.push(transaction);

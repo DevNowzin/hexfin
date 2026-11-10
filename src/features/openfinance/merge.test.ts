@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getAccountBalance, getMonthSummary, getTotalBalance } from '@/features/finance/selectors';
 import type { FinanceData, Transaction } from '@/features/finance/types';
-import { describeImport, mergeOpenFinance } from './merge';
+import { describeImport, importedStatus, mergeOpenFinance } from './merge';
 import type { OpenFinanceSnapshot, SnapshotAccount, SnapshotTransaction } from './types';
 
 const NOW = '2026-11-10T12:00:00.000Z';
@@ -120,9 +120,9 @@ describe('mergeOpenFinance', () => {
 
   it('atualiza o que o banco mudou e remove o que sumiu da janela', () => {
     const first = mergeOpenFinance(empty(), snapshot([account('c1', 'checking', 1000, [tx('t1'), tx('t2'), tx('old', { date: '2026-07-01' })])]), NOW, ids()).data;
-    const { data, report } = mergeOpenFinance(first, snapshot([account('c1', 'checking', 1000, [tx('t1', { status: 'pending' })])]), NOW, ids());
+    const { data, report } = mergeOpenFinance(first, snapshot([account('c1', 'checking', 1000, [tx('t1', { amountCents: 1500 })])]), NOW, ids());
     expect(data.transactions.map((item) => item.externalId).sort()).toEqual(['pluggy:old', 'pluggy:t1']);
-    expect(byExternal(data, 'pluggy:t1').status).toBe('pending');
+    expect(byExternal(data, 'pluggy:t1').amountCents).toBe(1500);
     expect(report).toMatchObject({ transactionsUpdated: 1, transactionsRemoved: 1, transactionsAdded: 0 });
   });
 
@@ -171,5 +171,30 @@ describe('describeImport', () => {
       .toBe('2 contas novas · 1 transação nova · 3 atualizadas');
     expect(describeImport({ accountsAdded: 0, accountsUpdated: 2, transactionsAdded: 0, transactionsUpdated: 0, transactionsRemoved: 0 }))
       .toBe('Nada novo desde a última vez');
+  });
+});
+
+describe('importedStatus', () => {
+  const today = '2026-11-10';
+
+  it('pagamento da conta que o banco ainda marca como pendente conta como feito', () => {
+    expect(importedStatus(tx('a', { status: 'pending', date: '2026-11-05' }), 'checking', today)).toBe('completed');
+    expect(importedStatus(tx('b', { status: 'pending', date: today }), 'savings', today)).toBe('completed');
+  });
+
+  it('agendamento na conta (data futura) continua pendente', () => {
+    expect(importedStatus(tx('a', { status: 'pending', date: '2026-11-20' }), 'checking', today)).toBe('pending');
+  });
+
+  it('cartão segue o status do banco', () => {
+    expect(importedStatus(tx('a', { status: 'pending', date: '2026-11-05' }), 'credit', today)).toBe('pending');
+  });
+
+  it('na importação, o Pix pendente entra nas saídas do mês e o saldo segue o do banco', () => {
+    const snap = snapshot([account('c1', 'checking', 9000, [tx('pix', { status: 'pending', amountCents: 1000 })])]);
+    const { data } = mergeOpenFinance(empty(), snap, NOW, ids());
+    expect(byExternal(data, 'pluggy:pix').status).toBe('completed');
+    expect(getMonthSummary(data.transactions, '2026-11', today)).toMatchObject({ expenseCents: 1000, pendingCents: 0 });
+    expect(getTotalBalance(data.accounts, data.transactions, today)).toBe(9000);
   });
 });
