@@ -12,6 +12,7 @@ import { IconButton } from '@/components/IconButton';
 import { Screen } from '@/components/Screen';
 import { SectionHeader } from '@/components/SectionHeader';
 import { TransactionItem } from '@/components/TransactionItem';
+import { getMonthAhead } from '@/features/finance/ahead';
 import { visibleInsights } from '@/features/finance/assistants';
 import { useFinance } from '@/features/finance/FinanceContext';
 import {
@@ -19,7 +20,6 @@ import {
   getCashFlow,
   getTotalBalance,
   getCurrentMonthKey,
-  getMonthSummary,
   getSpendingByCategory,
   sortTransactions,
 } from '@/features/finance/selectors';
@@ -28,7 +28,7 @@ import { useOpenFinanceSettings } from '@/features/openfinance/useOpenFinanceSet
 import { useQuickSync } from '@/features/openfinance/useQuickSync';
 import { UpdateBanner } from '@/features/update/UpdateBanner';
 import { useAppTheme } from '@/theme/AppTheme';
-import { formatMonth, greetingForHour, toDateInput } from '@/utils/format';
+import { greetingForHour, parseLocalDate, toDateInput } from '@/utils/format';
 
 type Segment = 'accounts' | 'investments';
 
@@ -43,7 +43,7 @@ function inSegment(account: Account, segment: Segment): boolean {
 
 export default function HomeScreen() {
   const data = useFinance();
-  const { accounts, transactions, profile, toggleBalances } = data;
+  const { accounts, transactions, profile, toggleBalances, bills } = data;
   const { colors, fonts } = useAppTheme();
   const router = useRouter();
   const [segment, setSegment] = useState<Segment>('accounts');
@@ -54,7 +54,6 @@ export default function HomeScreen() {
   const openFinanceLabel = openFinanceConnected ? 'Sincronizar Open Finance' : 'Conectar Open Finance';
 
   const monthKey = getCurrentMonthKey();
-  const summary = getMonthSummary(transactions, monthKey);
   const segmentAccounts = accounts.filter((account) => inSegment(account, segment));
   // Cartões e empréstimos aparecem na lista, mas não somam no saldo (são dívidas).
   const segmentBalance = getTotalBalance(segmentAccounts, transactions);
@@ -66,7 +65,10 @@ export default function HomeScreen() {
   const firstName = profile.name.trim().split(/\s+/)[0];
   const greeting = greetingForHour(new Date().getHours());
   const initial = firstName?.charAt(0).toLocaleUpperCase('pt-BR') || 'H';
-  const monthName = formatMonth(monthKey, false).toLocaleLowerCase('pt-BR');
+  // De hoje até o fim do mês: o que ainda vai entrar e sair (o que já passou fica em Atividades).
+  const ahead = getMonthAhead(data, today);
+  const untilLabel = parseLocalDate(ahead.until).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  const countLabel = (count: number) => (count === 0 ? 'Nada previsto' : `${count} ${count === 1 ? 'previsto' : 'previstos'}`);
 
   return (
     <Screen>
@@ -208,15 +210,17 @@ export default function HomeScreen() {
             </Card>
           )}
 
-          {transactions.length > 0 ? (
+          {transactions.length > 0 || bills.length > 0 ? (
             <View style={styles.summaryRow}>
               <Card style={styles.summaryCard}>
-                <Text style={[styles.summaryLabel, { color: colors.textMuted, fontFamily: fonts.regular }]}>Gastos em {monthName}</Text>
-                <AmountText cents={summary.expenseCents} color={colors.expense} style={styles.summaryValue} />
+                <Text style={[styles.summaryLabel, { color: colors.textMuted, fontFamily: fonts.regular }]}>A receber até {untilLabel}</Text>
+                <AmountText cents={ahead.receivableCents} color={colors.income} style={styles.summaryValue} />
+                <Text style={[styles.summaryLabel, { color: colors.textMuted, fontFamily: fonts.regular }]}>{countLabel(ahead.receivable.length)}</Text>
               </Card>
               <Card style={styles.summaryCard}>
-                <Text style={[styles.summaryLabel, { color: colors.textMuted, fontFamily: fonts.regular }]}>Receitas em {monthName}</Text>
-                <AmountText cents={summary.incomeCents} color={colors.income} style={styles.summaryValue} />
+                <Text style={[styles.summaryLabel, { color: colors.textMuted, fontFamily: fonts.regular }]}>A pagar até {untilLabel}</Text>
+                <AmountText cents={ahead.payableCents} color={colors.expense} style={styles.summaryValue} />
+                <Text style={[styles.summaryLabel, { color: colors.textMuted, fontFamily: fonts.regular }]}>{countLabel(ahead.payable.length)}</Text>
               </Card>
             </View>
           ) : null}
