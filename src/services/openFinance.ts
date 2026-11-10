@@ -3,6 +3,7 @@
 // O Client Secret fica no SecureStore do aparelho (escolha do usuário em 10/11).
 import {
   addDays,
+  connectorInfo,
   finalizeCardTransactions,
   normalizeAccount,
   normalizeLoan,
@@ -116,10 +117,8 @@ async function authenticate(clientId: string, clientSecret: string, deps: OpenFi
   return apiKey;
 }
 
-async function fetchInstitution(apiKey: string, itemId: string, deps: OpenFinanceDeps): Promise<string> {
-  const item = await call(`/items/${encodeURIComponent(itemId)}`, { apiKey }, deps);
-  const connector = item && typeof item === 'object' ? (item as { connector?: { name?: unknown } }).connector : undefined;
-  return typeof connector?.name === 'string' ? connector.name : 'Open Finance';
+async function fetchInstitution(apiKey: string, itemId: string, deps: OpenFinanceDeps) {
+  return connectorInfo(await call(`/items/${encodeURIComponent(itemId)}`, { apiKey }, deps));
 }
 
 async function fetchList(path: string, apiKey: string, deps: OpenFinanceDeps): Promise<unknown[]> {
@@ -144,7 +143,8 @@ async function fetchTransactions(apiKey: string, accountId: string, dateFrom: st
 }
 
 async function syncItem(apiKey: string, itemId: string, windowStart: string, deps: OpenFinanceDeps, warnings: string[]) {
-  const institution = await fetchInstitution(apiKey, itemId, deps);
+  const { institution, logoUrl } = await fetchInstitution(apiKey, itemId, deps);
+  const logo = logoUrl ? { logoUrl } : {};
   const accounts: SnapshotAccount[] = [];
   let skipped = 0;
   for (const raw of await fetchList(`/accounts?itemId=${encodeURIComponent(itemId)}`, apiKey, deps)) {
@@ -157,14 +157,17 @@ async function syncItem(apiKey: string, itemId: string, windowStart: string, dep
     const transactions = rawTransactions.map((item) => normalizeTransaction(item, account.kind));
     skipped += transactions.filter((item) => item === null).length;
     const valid = transactions.filter((item) => item !== null);
-    accounts.push({ ...account, transactions: account.kind === 'credit' ? finalizeCardTransactions(valid, account.billCycle) : valid });
+    accounts.push({ ...account, ...logo, transactions: account.kind === 'credit' ? finalizeCardTransactions(valid, account.billCycle) : valid });
   }
 
   // Empréstimos nem sempre vêm pelo MeuPluggy: se a API recusar, segue sem eles.
   let loans: SnapshotLoan[] = [];
   try {
     const rawLoans = await fetchList(`/loans?itemId=${encodeURIComponent(itemId)}`, apiKey, deps);
-    loans = rawLoans.map((raw) => normalizeLoan(raw, itemId, institution)).filter((loan) => loan !== null);
+    loans = rawLoans.flatMap((raw) => {
+      const loan = normalizeLoan(raw, itemId, institution);
+      return loan ? [{ ...loan, ...logo }] : [];
+    });
   } catch (error) {
     const code = error instanceof OpenFinanceError ? error.code : 'server';
     if (code === 'cancelled') throw error;

@@ -208,3 +208,13 @@ describe('ciclo da fatura na conta do cartão', () => {
     expect(next.accounts[0]!.billCycle).toEqual({ closeDate: '2026-12-29', dueDate: '2027-01-05' });
   });
 });
+
+describe('logo do banco', () => {
+  it('a conta importada guarda o logo do conector, inclusive as que já existiam', () => {
+    const logoUrl = 'https://cdn.pluggy.ai/assets/connector-icons/212.svg';
+    const before = mergeOpenFinance(empty(), snapshot([account('k1', 'checking', 1000, [])]), NOW, ids()).data;
+    expect(before.accounts[0]!.logoUrl).toBeUndefined();
+    const after = mergeOpenFinance(before, snapshot([{ ...account('k1', 'checking', 1000, []), logoUrl }]), NOW, ids()).data;
+    expect(after.accounts[0]!.logoUrl).toBe(logoUrl);
+  });
+});

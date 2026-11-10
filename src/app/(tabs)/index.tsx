@@ -3,12 +3,14 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AmountText } from '@/components/AmountText';
+import { AccountLogo } from '@/components/AccountLogo';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { CashFlowChart } from '@/components/CashFlowChart';
 import { CategoryBreakdown } from '@/components/CategoryBreakdown';
 import { GlowBackground } from '@/components/GlowBackground';
 import { IconButton } from '@/components/IconButton';
+import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { Screen } from '@/components/Screen';
 import { SectionHeader } from '@/components/SectionHeader';
 import { TransactionItem } from '@/components/TransactionItem';
@@ -80,9 +82,8 @@ export default function HomeScreen() {
             accessibilityRole="button"
             accessibilityLabel="Abrir perfil"
             onPress={() => router.push('/profile')}
-            style={[styles.avatar, { backgroundColor: colors.primary }]}
           >
-            <Text style={[styles.avatarText, { color: colors.primaryText, fontFamily: fonts.bold }]}>{initial}</Text>
+            <ProfileAvatar initial={initial} photoUri={profile.photoUri} size={46} />
           </Pressable>
           <View style={styles.topActions}>
             {openFinanceConnected ? (
@@ -188,12 +189,15 @@ export default function HomeScreen() {
               <Pressable accessibilityRole="button" accessibilityLabel="Ver contas" onPress={() => router.push('/accounts')} style={styles.mainHeader}>
                 <View style={styles.badges}>
                   {segmentAccounts.slice(0, 4).map((account, index) => (
-                    <View
+                    <AccountLogo
                       key={account.id}
-                      style={[styles.badge, { backgroundColor: account.color, borderColor: colors.surface, marginLeft: index === 0 ? 0 : -12 }]}
-                    >
-                      <Text style={[styles.badgeText, { color: colors.onColor, fontFamily: fonts.bold }]}>{account.institution.charAt(0).toLocaleUpperCase('pt-BR')}</Text>
-                    </View>
+                      color={account.color}
+                      icon={account.icon}
+                      logoUrl={account.logoUrl}
+                      initial={account.institution.charAt(0).toLocaleUpperCase('pt-BR')}
+                      size={40}
+                      style={[styles.badge, { borderColor: colors.surface, marginLeft: index === 0 ? 0 : -12 }]}
+                    />
                   ))}
                 </View>
                 <Ionicons name="chevron-forward" size={22} color={colors.text} />
@@ -213,16 +217,20 @@ export default function HomeScreen() {
 
           {transactions.length > 0 || bills.length > 0 ? (
             <View style={styles.summaryRow}>
-              <Card style={styles.summaryCard}>
-                <Text style={[styles.summaryLabel, { color: colors.textMuted, fontFamily: fonts.regular }]}>A receber até {untilLabel}</Text>
-                <AmountText cents={ahead.receivableCents} color={colors.income} style={styles.summaryValue} />
-                <Text style={[styles.summaryLabel, { color: colors.textMuted, fontFamily: fonts.regular }]}>{countLabel(ahead.receivable.length)}</Text>
-              </Card>
-              <Card style={styles.summaryCard}>
-                <Text style={[styles.summaryLabel, { color: colors.textMuted, fontFamily: fonts.regular }]}>A pagar até {untilLabel}</Text>
-                <AmountText cents={ahead.payableCents} color={colors.expense} style={styles.summaryValue} />
-                <Text style={[styles.summaryLabel, { color: colors.textMuted, fontFamily: fonts.regular }]}>{countLabel(ahead.payable.length)}</Text>
-              </Card>
+              <Pressable accessibilityRole="button" accessibilityLabel="Ver o que vou receber" onPress={() => router.push('/ahead?side=receivable')} style={styles.summaryPress}>
+                <Card style={styles.summaryCard}>
+                  <Text style={[styles.summaryLabel, { color: colors.textMuted, fontFamily: fonts.regular }]}>A receber até {untilLabel}</Text>
+                  <AmountText cents={ahead.receivableCents} color={colors.income} style={styles.summaryValue} />
+                  <Text style={[styles.summaryLabel, { color: colors.textMuted, fontFamily: fonts.regular }]}>{countLabel(ahead.receivable.length)}</Text>
+                </Card>
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Ver o que vou pagar" onPress={() => router.push('/ahead?side=payable')} style={styles.summaryPress}>
+                <Card style={styles.summaryCard}>
+                  <Text style={[styles.summaryLabel, { color: colors.textMuted, fontFamily: fonts.regular }]}>A pagar</Text>
+                  <AmountText cents={ahead.payableCents} color={colors.expense} style={styles.summaryValue} />
+                  <Text style={[styles.summaryLabel, { color: colors.textMuted, fontFamily: fonts.regular }]}>{countLabel(ahead.payable.length)}</Text>
+                </Card>
+              </Pressable>
             </View>
           ) : null}
 
@@ -294,8 +302,6 @@ const styles = StyleSheet.create({
   secondaryAction: { marginTop: 8 },
   scrollContent: { paddingBottom: 32 },
   topBar: { paddingHorizontal: 20, paddingTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  avatar: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 19 },
   topActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   syncButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   syncMessage: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 20, marginTop: 12, borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 14, paddingVertical: 10 },
@@ -305,19 +311,19 @@ const styles = StyleSheet.create({
   segments: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, marginTop: 22 },
   segment: { minHeight: 44, justifyContent: 'center', borderRadius: 22, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 18 },
   segmentText: { fontSize: 14 },
-  greeting: { fontSize: 36, letterSpacing: -1.2, paddingHorizontal: 20, marginTop: 110, marginBottom: 20 },
+  greeting: { fontSize: 36, letterSpacing: -1.2, paddingHorizontal: 20, marginTop: 24, marginBottom: 20 },
   content: { paddingHorizontal: 20 },
   mainCard: { gap: 14, padding: 22 },
   mainHeader: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
   badges: { flexDirection: 'row' },
-  badge: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  badgeText: { fontSize: 15 },
+  badge: { borderWidth: 2 },
   emptyIcon: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
   mainTitle: { fontSize: 20, lineHeight: 27 },
   mainLabel: { fontSize: 13 },
   mainValue: { fontSize: 32, letterSpacing: -1.1, marginTop: -8 },
   mainCaption: { fontSize: 13, lineHeight: 19 },
   summaryRow: { flexDirection: 'row', gap: 12, marginTop: 12 },
+  summaryPress: { flex: 1 },
   summaryCard: { flex: 1, padding: 16 },
   summaryLabel: { fontSize: 12 },
   summaryValue: { fontSize: 18, marginTop: 8 },

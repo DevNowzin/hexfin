@@ -12,15 +12,17 @@ export interface WorkSettings {
   lunchMinutes: number;
   /** Adicional por feriado trabalhado (100 = recebe o dobro no dia). */
   holidayBonusPercent: number;
-  /** Conta Carnaval (segunda e terça) e Corpus Christi como feriado. */
-  optionalHolidays: boolean;
+  /** Feriados que valem (ou não) na empresa, pelo nome. Ausente = padrão (nacionais sim; Carnaval e Corpus Christi não). */
+  holidayChoices: Record<string, boolean>;
   /** Primeiro dia do ciclo da escala (`YYYY-MM-DD`). */
   cycleStart: string;
   /** Um item por dia do ciclo: `true` = trabalha. Repete para sempre a partir de `cycleStart`. */
   cycle: boolean[];
   /** Dias que fogem da escala (falta, atraso, atestado, folga ou trabalho extra). */
   overrides: Record<string, DayMark>;
-  absencePenaltyCents: number;
+  /** Prêmio de assiduidade: entra no mês sem falta e sem atraso; uma falta ou um atraso tira o prêmio inteiro. */
+  attendanceBonusCents: number;
+  /** Desconto por atraso (cada atraso). */
   latePenaltyCents: number;
   /** Quanto cai no dia 15 (o resto cai no último dia do mês). 100 = tudo no fim do mês. */
   firstPaymentPercent: number;
@@ -39,11 +41,11 @@ export function defaultWorkSettings(today: string): WorkSettings {
     shiftMinutes: 9 * 60,
     lunchMinutes: 60,
     holidayBonusPercent: 100,
-    optionalHolidays: false,
+    holidayChoices: {},
     cycleStart: sunday,
     cycle: [false, true, true, true, true, true, true],
     overrides: {},
-    absencePenaltyCents: 0,
+    attendanceBonusCents: 0,
     latePenaltyCents: 0,
     firstPaymentPercent: 40,
     receivedEarly: [],
@@ -106,17 +108,34 @@ const FIXED_HOLIDAYS: Array<[string, string]> = [
   ['12-25', 'Natal'],
 ];
 
-/** Feriados nacionais do ano (data → nome). Carnaval e Corpus Christi são ponto facultativo: só com `optional`. */
-export function holidaysOf(year: number, optional: boolean): Map<string, string> {
+/** Ponto facultativo: só vale se o usuário ligar. */
+export const OPTIONAL_HOLIDAYS = ['Carnaval', 'Corpus Christi'];
+
+export interface Holiday {
+  date: string;
+  name: string;
+  /** Vale na empresa (pela escolha do usuário ou pelo padrão). */
+  counts: boolean;
+}
+
+/** Todos os feriados nacionais do ano (e os facultativos), com a escolha do usuário aplicada. */
+export function holidayList(year: number, choices: Record<string, boolean>): Holiday[] {
   const easter = easterSunday(year);
-  const holidays = new Map<string, string>(FIXED_HOLIDAYS.map(([day, name]) => [`${year}-${day}`, name]));
-  holidays.set(addDays(easter, -2), 'Sexta-feira Santa');
-  if (optional) {
-    holidays.set(addDays(easter, -48), 'Carnaval');
-    holidays.set(addDays(easter, -47), 'Carnaval');
-    holidays.set(addDays(easter, 60), 'Corpus Christi');
-  }
-  return holidays;
+  const all: Array<[string, string]> = [
+    ...FIXED_HOLIDAYS.map(([day, name]): [string, string] => [`${year}-${day}`, name]),
+    [addDays(easter, -48), 'Carnaval'],
+    [addDays(easter, -47), 'Carnaval'],
+    [addDays(easter, -2), 'Sexta-feira Santa'],
+    [addDays(easter, 60), 'Corpus Christi'],
+  ];
+  return all
+    .map(([date, name]) => ({ date, name, counts: choices[name] ?? !OPTIONAL_HOLIDAYS.includes(name) }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** Feriados que valem na empresa no ano (data → nome). */
+export function holidaysOf(year: number, choices: Record<string, boolean>): Map<string, string> {
+  return new Map(holidayList(year, choices).filter((holiday) => holiday.counts).map((holiday) => [holiday.date, holiday.name]));
 }
 
 /** Trabalho ou folga pela escala (sem as marcações). Antes do início do ciclo, conta para trás. */
@@ -144,24 +163,31 @@ export interface MonthPay {
   sickDays: number;
   baseCents: number;
   holidayExtraCents: number;
+  /** Prêmio de assiduidade que entra no mês (zero se houve falta ou atraso). */
+  attendanceBonusCents: number;
+  /** Perdeu o prêmio de assiduidade neste mês. */
+  attendanceLost: boolean;
+  /** Descontos de atraso. */
   penaltiesCents: number;
   totalCents: number;
 }
 
-/** Previsão do mês: cada dia trabalhado (ou com atestado) paga as horas do dia; feriado trabalhado ganha o adicional. */
+/**
+ * Previsão do mês: cada dia trabalhado (ou com atestado) paga as horas do dia; feriado trabalhado ganha o
+ * adicional. Falta não paga o dia. O prêmio de assiduidade entra se não houve falta nem atraso; atestado não tira.
+ */
 export function computeMonthPay(settings: WorkSettings, monthKey: string): MonthPay {
-  const holidays = holidaysOf(Number(monthKey.slice(0, 4)), settings.optionalHolidays);
+  const holidays = holidaysOf(Number(monthKey.slice(0, 4)), settings.holidayChoices);
   const dayCents = Math.round((settings.hourlyRateCents * paidMinutesPerDay(settings)) / 60);
   const pay: MonthPay = {
     workedDays: 0, paidMinutes: 0, holidaysWorked: 0, absences: 0, lates: 0, sickDays: 0,
-    baseCents: 0, holidayExtraCents: 0, penaltiesCents: 0, totalCents: 0,
+    baseCents: 0, holidayExtraCents: 0, attendanceBonusCents: 0, attendanceLost: false, penaltiesCents: 0, totalCents: 0,
   };
   for (const day of daysOfMonth(monthKey)) {
     const mark = dayMark(settings, day);
     if (mark === 'off') continue;
     if (mark === 'absence') {
       pay.absences += 1;
-      pay.penaltiesCents += settings.absencePenaltyCents;
       continue;
     }
     pay.workedDays += 1;
@@ -177,7 +203,9 @@ export function computeMonthPay(settings: WorkSettings, monthKey: string): Month
       pay.holidayExtraCents += Math.round((dayCents * settings.holidayBonusPercent) / 100);
     }
   }
-  pay.totalCents = Math.max(0, pay.baseCents + pay.holidayExtraCents - pay.penaltiesCents);
+  pay.attendanceLost = settings.attendanceBonusCents > 0 && (pay.absences > 0 || pay.lates > 0);
+  pay.attendanceBonusCents = pay.absences > 0 || pay.lates > 0 ? 0 : settings.attendanceBonusCents;
+  pay.totalCents = Math.max(0, pay.baseCents + pay.holidayExtraCents + pay.attendanceBonusCents - pay.penaltiesCents);
   return pay;
 }
 
@@ -258,6 +286,18 @@ export function cyclePattern(cycle: boolean[]): [number, number] | null {
   return work > 0 && rest.every((works) => !works) ? [work, rest.length] : null;
 }
 
+function sanitizeChoices(raw: Record<string, unknown>): Record<string, boolean> {
+  const choices: Record<string, boolean> = {};
+  if (raw.holidayChoices && typeof raw.holidayChoices === 'object') {
+    for (const [name, value] of Object.entries(raw.holidayChoices as Record<string, unknown>)) {
+      if (typeof value === 'boolean' && name.length <= 60) choices[name] = value;
+    }
+  }
+  // Versão anterior: um liga/desliga só para Carnaval e Corpus Christi.
+  if (raw.optionalHolidays === true) for (const name of OPTIONAL_HOLIDAYS) choices[name] ??= true;
+  return choices;
+}
+
 /** Lê o que foi salvo; campo ausente ou inválido volta ao padrão. */
 export function sanitizeWorkSettings(value: unknown, today: string): WorkSettings | undefined {
   if (!value || typeof value !== 'object') return undefined;
@@ -280,11 +320,12 @@ export function sanitizeWorkSettings(value: unknown, today: string): WorkSetting
     shiftMinutes: int(raw.shiftMinutes, base.shiftMinutes, 24 * 60),
     lunchMinutes: int(raw.lunchMinutes, base.lunchMinutes, 24 * 60),
     holidayBonusPercent: int(raw.holidayBonusPercent, base.holidayBonusPercent, 500),
-    optionalHolidays: raw.optionalHolidays === true,
+    holidayChoices: sanitizeChoices(raw),
     cycleStart: typeof raw.cycleStart === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.cycleStart) ? raw.cycleStart : base.cycleStart,
     cycle,
     overrides,
-    absencePenaltyCents: int(raw.absencePenaltyCents, 0, 100_000_00),
+    // Versão anterior guardava o "desconto por falta"; era o prêmio de assiduidade que se perde.
+    attendanceBonusCents: int(raw.attendanceBonusCents ?? raw.absencePenaltyCents, 0, 100_000_00),
     latePenaltyCents: int(raw.latePenaltyCents, 0, 100_000_00),
     firstPaymentPercent: int(raw.firstPaymentPercent, base.firstPaymentPercent, 100),
     receivedEarly: Array.isArray(raw.receivedEarly) ? raw.receivedEarly.filter((item): item is string => typeof item === 'string' && /^\d{4}-\d{2}:[12]$/.test(item)) : [],

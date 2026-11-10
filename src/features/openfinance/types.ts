@@ -36,6 +36,7 @@ export interface SnapshotAccount {
   kind: ImportedAccountKind;
   name: string;
   institution: string;
+  logoUrl?: string;
   /** Saldo que o banco informa hoje. No cartão, é a fatura em aberto (positivo = devendo). */
   bankBalanceCents: number;
   /** Só cartão, quando o banco informa fechamento e vencimento. */
@@ -48,6 +49,7 @@ export interface SnapshotLoan {
   itemId: string;
   name: string;
   institution: string;
+  logoUrl?: string;
   /** Quanto falta para quitar (positivo). */
   outstandingCents: number;
 }

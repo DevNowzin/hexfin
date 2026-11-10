@@ -7,6 +7,7 @@ import {
   computeMonthPay,
   defaultWorkSettings,
   easterSunday,
+  holidayList,
   holidaysOf,
   monthPayments,
   nextDayMark,
@@ -26,13 +27,20 @@ describe('feriados', () => {
   it('Páscoa e Sexta-feira Santa', () => {
     expect(easterSunday(2026)).toBe('2026-04-05');
     expect(easterSunday(2027)).toBe('2027-03-28');
-    expect(holidaysOf(2026, false).get('2026-04-03')).toBe('Sexta-feira Santa');
+    expect(holidaysOf(2026, {}).get('2026-04-03')).toBe('Sexta-feira Santa');
   });
 
   it('Carnaval e Corpus Christi só quando o usuário liga', () => {
-    expect(holidaysOf(2026, false).has('2026-02-17')).toBe(false);
-    expect(holidaysOf(2026, true).get('2026-02-17')).toBe('Carnaval');
-    expect(holidaysOf(2026, true).get('2026-06-04')).toBe('Corpus Christi');
+    expect(holidaysOf(2026, {}).has('2026-02-17')).toBe(false);
+    expect(holidaysOf(2026, { Carnaval: true }).get('2026-02-17')).toBe('Carnaval');
+    expect(holidaysOf(2026, { 'Corpus Christi': true }).get('2026-06-04')).toBe('Corpus Christi');
+  });
+
+  it('feriado nacional que a empresa não dá pode ser desligado', () => {
+    expect(holidaysOf(2026, { Finados: false }).has('2026-11-02')).toBe(false);
+    expect(holidayList(2026, { Finados: false }).find((holiday) => holiday.name === 'Finados')).toMatchObject({ date: '2026-11-02', counts: false });
+    // Feriado desligado vira dia comum: novembro fica com 1 feriado trabalhado.
+    expect(computeMonthPay(settings({ holidayChoices: { Finados: false } }), '2026-11')).toMatchObject({ holidaysWorked: 1, totalCents: 208000 });
   });
 });
 
@@ -48,14 +56,23 @@ describe('computeMonthPay', () => {
     expect(computeMonthPay(settings(), '2026-10').totalCents).toBeGreaterThan(computeMonthPay(settings(), '2026-11').totalCents);
   });
 
-  it('falta desconta o dia e a multa (ex.: R$ 150); atestado paga o dia', () => {
-    const withAbsence = settings({ absencePenaltyCents: 15000, overrides: { '2026-11-03': 'absence', '2026-11-04': 'sick' } });
-    expect(computeMonthPay(withAbsence, '2026-11')).toMatchObject({ workedDays: 24, absences: 1, sickDays: 1, penaltiesCents: 15000, totalCents: 193000 });
+  it('assiduidade (ex.: R$ 150) entra no mês sem falta nem atraso', () => {
+    expect(computeMonthPay(settings({ attendanceBonusCents: 15000 }), '2026-11')).toMatchObject({ attendanceBonusCents: 15000, attendanceLost: false, totalCents: 231000 });
   });
 
-  it('atraso paga o dia e desconta o valor do atraso', () => {
-    const late = settings({ latePenaltyCents: 2000, overrides: { '2026-11-05': 'late' } });
-    expect(computeMonthPay(late, '2026-11')).toMatchObject({ workedDays: 25, lates: 1, totalCents: 214000 });
+  it('falta: não paga o dia e perde a assiduidade inteira (uma vez só)', () => {
+    const twoAbsences = settings({ attendanceBonusCents: 15000, overrides: { '2026-11-03': 'absence', '2026-11-04': 'absence' } });
+    expect(computeMonthPay(twoAbsences, '2026-11')).toMatchObject({ workedDays: 23, absences: 2, attendanceBonusCents: 0, attendanceLost: true, penaltiesCents: 0, totalCents: 200000 });
+  });
+
+  it('atestado paga o dia e não tira a assiduidade', () => {
+    const sick = settings({ attendanceBonusCents: 15000, overrides: { '2026-11-04': 'sick' } });
+    expect(computeMonthPay(sick, '2026-11')).toMatchObject({ workedDays: 25, sickDays: 1, attendanceBonusCents: 15000, totalCents: 231000 });
+  });
+
+  it('atraso paga o dia, desconta o atraso e também tira a assiduidade', () => {
+    const late = settings({ attendanceBonusCents: 15000, latePenaltyCents: 2000, overrides: { '2026-11-05': 'late' } });
+    expect(computeMonthPay(late, '2026-11')).toMatchObject({ workedDays: 25, lates: 1, attendanceLost: true, penaltiesCents: 2000, totalCents: 214000 });
   });
 
   it('sem valor da hora, nada a receber', () => {
@@ -142,5 +159,11 @@ describe('escala no calendário', () => {
     expect(clean?.overrides).toEqual({ '2026-11-10': 'absence' });
     expect(clean?.receivedEarly).toEqual(['2026-11:1']);
     expect(sanitizeWorkSettings(null, '2026-11-10')).toBeUndefined();
+  });
+
+  it('dados da versão anterior: desconto por falta vira assiduidade e o liga de Carnaval vira escolha por feriado', () => {
+    const old = sanitizeWorkSettings({ absencePenaltyCents: 15000, optionalHolidays: true }, '2026-11-10');
+    expect(old?.attendanceBonusCents).toBe(15000);
+    expect(old?.holidayChoices).toEqual({ Carnaval: true, 'Corpus Christi': true });
   });
 });

@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { AccountLogo } from '@/components/AccountLogo';
 import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AmountText } from '@/components/AmountText';
@@ -47,9 +48,7 @@ export default function AccountsScreen() {
               return (
                 <Pressable key={account.id} accessibilityRole="button" accessibilityLabel={`Editar conta ${account.name}`} onPress={() => router.push(`/accounts/${account.id}/edit`)} style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}>
                   <Card style={styles.accountCard}>
-                    <View style={[styles.accountLogo, { backgroundColor: `${account.color}20` }]}>
-                      <View style={[styles.accountLogoInner, { backgroundColor: account.color }]} />
-                    </View>
+                    <AccountLogo color={account.color} icon={account.icon} logoUrl={account.logoUrl} />
                     <View style={styles.accountContent}>
                       <Text style={[styles.institution, { color: colors.textMuted, fontFamily: fonts.regular }]}>{account.institution}</Text>
                       <Text style={[styles.accountName, { color: colors.text, fontFamily: fonts.semiBold }]}>{account.name}</Text>
@@ -80,8 +79,6 @@ const styles = StyleSheet.create({
   emptyCard: { marginTop: 18 },
   list: { gap: 11, marginTop: 22 },
   accountCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 },
-  accountLogo: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  accountLogoInner: { width: 16, height: 16, borderRadius: 8 },
   accountContent: { flex: 1, minWidth: 0 },
   institution: { fontSize: 10 },
   accountName: { fontSize: 14, marginTop: 3 },

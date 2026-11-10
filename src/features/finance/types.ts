@@ -25,6 +25,10 @@ export interface Account {
   externalId?: string;
   /** Cartão do Open Finance: fechamento e vencimento da fatura aberta (`YYYY-MM-DD`), base do ciclo de cada mês. */
   billCycle?: { closeDate: string; dueDate: string };
+  /** Ícone escolhido (nome do Ionicons da lista de `AccountLogo`). */
+  icon?: string;
+  /** Logo do banco, vindo do conector do Open Finance (só `https`). */
+  logoUrl?: string;
 }
 
 export interface Transaction {
@@ -92,6 +96,8 @@ export interface Profile {
   theme: ThemePreference;
   /** Assistentes que o usuário desligou. Ausente = todos ligados. */
   disabledAssistants?: AssistantId[];
+  /** Foto escolhida na galeria, copiada para a pasta do app (fica só no aparelho). */
+  photoUri?: string;
 }
 
 export interface FinanceData {

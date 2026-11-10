@@ -15,6 +15,7 @@ import {
   dayMark,
   daysOfMonth,
   defaultWorkSettings,
+  holidayList,
   holidaysOf,
   monthPayments,
   nextDayMark,
@@ -66,7 +67,14 @@ export default function SalaryScreen() {
   const save = (patch: Partial<WorkSettings>) => saveWork({ ...settings, ...patch });
   const pay = computeMonthPay(settings, monthKey);
   const payments = monthPayments(settings, monthKey);
-  const holidays = holidaysOf(Number(monthKey.slice(0, 4)), settings.optionalHolidays);
+  const holidays = holidaysOf(Number(monthKey.slice(0, 4)), settings.holidayChoices);
+  // Carnaval tem dois dias: uma linha por nome.
+  const holidayRows = holidayList(Number(monthKey.slice(0, 4)), settings.holidayChoices).reduce<Array<{ name: string; dates: string[]; counts: boolean }>>((rows, holiday) => {
+    const row = rows.find((item) => item.name === holiday.name);
+    if (row) row.dates.push(holiday.date);
+    else rows.push({ name: holiday.name, dates: [holiday.date], counts: holiday.counts });
+    return rows;
+  }, []);
   const days = daysOfMonth(monthKey);
   const leading = parseLocalDate(days[0]!).getDay();
   const monthName = formatMonth(monthKey, false).toLocaleLowerCase('pt-BR');
@@ -152,10 +160,25 @@ export default function SalaryScreen() {
             {pay.workedDays} dias · {minutesToHours(pay.paidMinutes)} h pagas
             {pay.holidaysWorked > 0 ? ` · ${pay.holidaysWorked} ${pay.holidaysWorked === 1 ? 'feriado' : 'feriados'} (+R$ ${formatAmountInput(String(pay.holidayExtraCents))})` : ''}
           </Text>
-          {pay.penaltiesCents > 0 ? (
+          {pay.attendanceBonusCents > 0 ? (
+            <Text style={[styles.meta, { color: colors.income, fontFamily: fonts.regular }]}>
+              + R$ {formatAmountInput(String(pay.attendanceBonusCents))} de assiduidade
+            </Text>
+          ) : null}
+          {pay.absences > 0 || pay.lates > 0 ? (
             <Text style={[styles.meta, { color: colors.expense, fontFamily: fonts.regular }]}>
-              {pay.absences > 0 ? `${pay.absences} ${pay.absences === 1 ? 'falta' : 'faltas'} ` : ''}
-              {pay.lates > 0 ? `${pay.lates} ${pay.lates === 1 ? 'atraso' : 'atrasos'} ` : ''}· − R$ {formatAmountInput(String(pay.penaltiesCents))}
+              {[
+                pay.absences > 0 ? `${pay.absences} ${pay.absences === 1 ? 'falta (dia não pago)' : 'faltas (dias não pagos)'}` : null,
+                pay.lates > 0 ? `${pay.lates} ${pay.lates === 1 ? 'atraso' : 'atrasos'}${pay.penaltiesCents > 0 ? ` (− R$ ${formatAmountInput(String(pay.penaltiesCents))})` : ''}` : null,
+                pay.attendanceLost ? 'perdeu a assiduidade' : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </Text>
+          ) : null}
+          {pay.sickDays > 0 ? (
+            <Text style={[styles.meta, { color: colors.textMuted, fontFamily: fonts.regular }]}>
+              {pay.sickDays} {pay.sickDays === 1 ? 'atestado' : 'atestados'}: dia pago, sem desconto
             </Text>
           ) : null}
           {payments.map((payment) => {
@@ -324,26 +347,39 @@ export default function SalaryScreen() {
           </View>
         </View>
         <View style={styles.fieldRow}>
-          {moneyField('Desconto por falta (R$)', settings.absencePenaltyCents, (cents) => save({ absencePenaltyCents: cents }))}
+          {moneyField('Prêmio de assiduidade (R$)', settings.attendanceBonusCents, (cents) => save({ attendanceBonusCents: cents }))}
           {moneyField('Desconto por atraso (R$)', settings.latePenaltyCents, (cents) => save({ latePenaltyCents: cents }))}
         </View>
+        <Text style={[styles.hint, { color: colors.textMuted, fontFamily: fonts.regular }]}>
+          A assiduidade entra no mês sem falta e sem atraso; uma falta ou um atraso tira o prêmio inteiro. Falta não paga o dia. Atestado paga o dia e não tira nada.
+        </Text>
         <View style={styles.fieldRow}>
           {percentField('Adicional no feriado (%)', settings.holidayBonusPercent, 500, (value) => save({ holidayBonusPercent: value }))}
-          <View style={styles.fieldHalf}>
-            <Text style={labelStyle}>Carnaval e Corpus Christi</Text>
-            <View style={[styles.switchRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.switchText, { color: colors.text, fontFamily: fonts.regular }]}>Contar como feriado</Text>
-              <Switch
-                accessibilityLabel="Contar Carnaval e Corpus Christi como feriado"
-                value={settings.optionalHolidays}
-                onValueChange={(value) => save({ optionalHolidays: value })}
-                trackColor={{ true: colors.primary, false: colors.border }}
-              />
-            </View>
-          </View>
+          <View style={styles.fieldHalf} />
         </View>
         <Text style={[styles.hint, { color: colors.textMuted, fontFamily: fonts.regular }]}>
           Horas pagas por dia: {minutesToHours(Math.max(0, settings.shiftMinutes - settings.lunchMinutes))} h. Pagamento no dia 15 e no último dia do mês; domingo ou segunda antecipa para o sábado.
+        </Text>
+
+        <SectionHeader title={`Feriados de ${monthKey.slice(0, 4)} na sua empresa`} />
+        <Card style={styles.holidayList}>
+          {holidayRows.map((holiday, index) => (
+            <View key={holiday.name} style={[styles.holidayRow, index > 0 ? { borderTopColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth } : null]}>
+              <View style={styles.holidayInfo}>
+                <Text style={[styles.holidayName, { color: colors.text, fontFamily: fonts.medium }]}>{holiday.name}</Text>
+                <Text style={[styles.meta, { color: colors.textMuted, fontFamily: fonts.regular }]}>{holiday.dates.map(shortDate).join(' e ')}</Text>
+              </View>
+              <Switch
+                accessibilityLabel={`${holiday.name} vale como feriado na empresa`}
+                value={holiday.counts}
+                onValueChange={(value) => save({ holidayChoices: { ...settings.holidayChoices, [holiday.name]: value } })}
+                trackColor={{ true: colors.primary, false: colors.border }}
+              />
+            </View>
+          ))}
+        </Card>
+        <Text style={[styles.hint, { color: colors.textMuted, fontFamily: fonts.regular }]}>
+          Desligado, o dia vira dia comum da escala (sem adicional). Carnaval e Corpus Christi são ponto facultativo e começam desligados.
         </Text>
       </ScrollView>
     </Screen>
@@ -384,6 +420,8 @@ const styles = StyleSheet.create({
   fieldRow: { flexDirection: 'row', gap: 12 },
   fieldHalf: { flex: 1 },
   input: { minHeight: 52, borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 15, paddingVertical: 13, fontSize: 14, outlineStyle: 'none' } as never,
-  switchRow: { minHeight: 52, borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
-  switchText: { flex: 1, fontSize: 12 },
+  holidayList: { paddingVertical: 4 },
+  holidayRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
+  holidayInfo: { flex: 1 },
+  holidayName: { fontSize: 13 },
 });

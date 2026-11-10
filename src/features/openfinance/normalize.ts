@@ -279,6 +279,14 @@ export function normalizeLoan(raw: unknown, itemId: string, institution: string)
   };
 }
 
+/** Nome e logo do banco a partir do Item do Pluggy (`connector.name` e `connector.imageUrl`). Logo só em `https`. */
+export function connectorInfo(item: unknown): { institution: string; logoUrl?: string } {
+  const connector = isRecord(item) && isRecord(item.connector) ? item.connector : {};
+  const institution = text(connector.name) || 'Open Finance';
+  const image = text(connector.imageUrl);
+  return image.startsWith('https://') && image.length <= 500 ? { institution, logoUrl: image } : { institution };
+}
+
 /** Lista `results` de uma resposta paginada do Pluggy; null quando o formato não bate. */
 export function resultsOf(value: unknown): unknown[] | null {
   return isRecord(value) && Array.isArray(value.results) ? value.results : null;

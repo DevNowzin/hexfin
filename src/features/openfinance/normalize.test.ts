@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  connectorInfo,
   addDays,
   billDatesFor,
   billStatusFor,
@@ -229,5 +230,17 @@ describe('parcelas', () => {
       ['2026-12-08', '2027-01'],
     ]);
     expect(finalizeCardTransactions([card('c', { description: 'Mercado' })], undefined)[0]!.billMonth).toBeUndefined();
+  });
+});
+
+describe('connectorInfo', () => {
+  it('pega nome e logo do banco; logo só em https', () => {
+    expect(connectorInfo({ connector: { name: 'Nubank', imageUrl: 'https://cdn.pluggy.ai/assets/connector-icons/212.svg' } })).toEqual({
+      institution: 'Nubank',
+      logoUrl: 'https://cdn.pluggy.ai/assets/connector-icons/212.svg',
+    });
+    expect(connectorInfo({ connector: { name: 'Inter', imageUrl: 'http://exemplo/logo.png' } })).toEqual({ institution: 'Inter' });
+    expect(connectorInfo({ connector: { name: 'Inter', imageUrl: 'javascript:alert(1)' } })).toEqual({ institution: 'Inter' });
+    expect(connectorInfo(null)).toEqual({ institution: 'Open Finance' });
   });
 });

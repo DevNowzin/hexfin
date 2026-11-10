@@ -30,6 +30,7 @@ interface Target {
   name: string;
   institution: string;
   billCycle?: BillCycle;
+  logoUrl?: string;
 }
 
 export type IdFactory = (prefix: string) => string;
@@ -38,7 +39,12 @@ function upsertAccount(accounts: Account[], target: Target, createId: IdFactory,
   const index = accounts.findIndex((account) => account.externalId === target.externalId);
   const existing = accounts[index];
   if (existing) {
-    const updated = { ...existing, type: target.type, ...(target.billCycle ? { billCycle: target.billCycle } : {}) };
+    const updated = {
+      ...existing,
+      type: target.type,
+      ...(target.billCycle ? { billCycle: target.billCycle } : {}),
+      ...(target.logoUrl ? { logoUrl: target.logoUrl } : {}),
+    };
     accounts[index] = updated;
     report.accountsUpdated += 1;
     return updated;
@@ -52,6 +58,7 @@ function upsertAccount(accounts: Account[], target: Target, createId: IdFactory,
     openingBalanceCents: 0,
     externalId: target.externalId,
     ...(target.billCycle ? { billCycle: target.billCycle } : {}),
+    ...(target.logoUrl ? { logoUrl: target.logoUrl } : {}),
   };
   accounts.push(created);
   report.accountsAdded += 1;
@@ -139,6 +146,7 @@ export function mergeOpenFinance(
         name: source.name,
         institution: source.institution,
         billCycle: source.billCycle,
+        logoUrl: source.logoUrl,
       },
       createId,
       report,
@@ -148,7 +156,7 @@ export function mergeOpenFinance(
     balanceCents: -loan.outstandingCents,
     account: upsertAccount(
       accounts,
-      { externalId: loan.externalId, type: 'loan', name: loan.name, institution: loan.institution },
+      { externalId: loan.externalId, type: 'loan', name: loan.name, institution: loan.institution, logoUrl: loan.logoUrl },
       createId,
       report,
     ),

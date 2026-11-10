@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { ListRow } from '@/components/ListRow';
+import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { Screen } from '@/components/Screen';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { SectionHeader } from '@/components/SectionHeader';
@@ -18,6 +20,7 @@ import type { ThemePreference } from '@/features/finance/types';
 import { useSecurity } from '@/features/security/SecurityContext';
 import { computeMonthPay } from '@/features/work/payroll';
 import { CURRENT_VERSION, type UpdateState, useAppUpdate } from '@/features/update/useAppUpdate';
+import { pickProfilePhoto, removeProfilePhoto } from '@/services/profilePhoto';
 import { useAppTheme } from '@/theme/AppTheme';
 import { confirmAction } from '@/utils/confirm';
 import { formatCurrency } from '@/utils/format';
@@ -68,14 +71,54 @@ export default function ProfileScreen() {
   const openFinance = useOpenFinanceSettings();
   const update = useAppUpdate();
   const initial = profile.name.trim().charAt(0).toLocaleUpperCase('pt-BR') || 'H';
+  const [photoError, setPhotoError] = useState('');
+
+  async function changePhoto() {
+    setPhotoError('');
+    try {
+      const uri = await pickProfilePhoto();
+      if (!uri) return;
+      const previous = profile.photoUri;
+      updateProfile({ photoUri: uri });
+      await removeProfilePhoto(previous);
+    } catch (error) {
+      console.warn('Foto de perfil', error);
+      setPhotoError('Não foi possível usar essa foto. Tente outra.');
+    }
+  }
+
+  async function removePhoto() {
+    const previous = profile.photoUri;
+    updateProfile({ photoUri: undefined });
+    try {
+      await removeProfilePhoto(previous);
+    } catch (error) {
+      console.warn('Remover foto de perfil', error);
+    }
+  }
+
+  function clearEverything() {
+    void removePhoto();
+    clearData();
+  }
 
   return (
     <Screen>
       <ScreenHeader title="Perfil" subtitle="O HexFin do seu jeito" showBack />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <Card style={styles.profileCard}>
-          <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
-            <Text style={[styles.avatarText, { color: colors.primaryText, fontFamily: fonts.bold }]}>{initial}</Text>
+          <View style={styles.photoColumn}>
+            <Pressable accessibilityRole="button" accessibilityLabel={profile.photoUri ? 'Trocar foto de perfil' : 'Escolher foto de perfil'} onPress={changePhoto} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
+              <ProfileAvatar initial={initial} photoUri={profile.photoUri} />
+              <View style={[styles.cameraBadge, { backgroundColor: colors.text, borderColor: colors.surface }]}>
+                <Ionicons name="camera" size={12} color={colors.background} />
+              </View>
+            </Pressable>
+            {profile.photoUri ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Remover foto de perfil" onPress={removePhoto} hitSlop={8} style={styles.removePhoto}>
+                <Text style={[styles.removePhotoText, { color: colors.textMuted, fontFamily: fonts.medium }]}>Remover</Text>
+              </Pressable>
+            ) : null}
           </View>
           <View style={styles.profileTextContainer}>
             <TextInput
@@ -88,7 +131,9 @@ export default function ProfileScreen() {
               maxLength={40}
               style={[styles.nameInput, { color: colors.text, fontFamily: fonts.semiBold }]}
             />
-            <Text style={[styles.profileCaption, { color: colors.textMuted, fontFamily: fonts.regular }]}>Finanças pessoais, locais e privadas</Text>
+            <Text style={[styles.profileCaption, { color: photoError ? colors.expense : colors.textMuted, fontFamily: fonts.regular }]}>
+              {photoError || 'Toque na foto para trocar. Ela fica só no seu celular.'}
+            </Text>
           </View>
         </Card>
 
@@ -218,7 +263,7 @@ export default function ProfileScreen() {
               icon="trash-outline"
               title="Apagar contas e transações"
               destructive
-              onPress={() => confirmAction('Apagar todos os dados?', 'Esta ação remove permanentemente suas contas e transações deste dispositivo.', 'Apagar tudo', clearData)}
+              onPress={() => confirmAction('Apagar todos os dados?', 'Esta ação remove permanentemente suas contas e transações deste dispositivo.', 'Apagar tudo', clearEverything)}
             />
           </Card>
           <View style={styles.privacyNote}>
@@ -250,8 +295,10 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   content: { paddingHorizontal: 20, paddingBottom: 42 },
   profileCard: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  avatar: { width: 62, height: 62, borderRadius: 31, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 27 },
+  photoColumn: { alignItems: 'center' },
+  cameraBadge: { position: 'absolute', right: -2, bottom: -2, width: 24, height: 24, borderRadius: 12, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  removePhoto: { marginTop: 6, minHeight: 24, justifyContent: 'center' },
+  removePhotoText: { fontSize: 11 },
   profileTextContainer: { flex: 1 },
   nameInput: { minWidth: 0, fontSize: 20, paddingVertical: 3, outlineStyle: 'none' } as never,
   profileCaption: { fontSize: 11, marginTop: 6 },

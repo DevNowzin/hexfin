@@ -68,12 +68,22 @@ describe('getMonthAhead', () => {
     const purchases = [tx('mercado', { accountId: 'k', date: '2026-10-20', billMonth: '2026-11', amountCents: 45996 })];
     // Fatura de nov vence 05/11: em 03/11 ainda está a pagar.
     const before = getMonthAhead(data(purchases, [], [checking, card]), '2026-11-03');
-    expect(before.payable).toEqual([{ id: 'card:k', description: 'Fatura Nubank', date: '2026-11-05', amountCents: 45996, kind: 'card' }]);
+    expect(before.payable).toMatchObject([{ id: 'card:k:2026-11', description: 'Fatura Nubank', date: '2026-11-05', amountCents: 45996, kind: 'card' }]);
     // Paga no dia 04: some.
     const paid = getMonthAhead(data([...purchases, tx('pagou', { date: '2026-11-04', billPayment: true, transferAccountId: 'k' })], [], [checking, card]), '2026-11-04');
     expect(paid.payable).toEqual([]);
-    // Depois do vencimento, não é mais "a pagar até o fim do mês".
+    // Depois do vencimento, sem compras na fatura seguinte, não há fatura a pagar.
     expect(getMonthAhead(data(purchases, [], [checking, card]), TODAY).payable).toEqual([]);
+  });
+
+  it('a próxima fatura entra mesmo vencendo no mês seguinte (fatura aberta de dezembro)', () => {
+    const purchases = [
+      tx('paga', { accountId: 'k', date: '2026-10-20', billMonth: '2026-11', amountCents: 45996 }),
+      tx('padaria', { accountId: 'k', date: '2026-11-03', billMonth: '2026-12', amountCents: 2500 }),
+      tx('parcela-futura', { accountId: 'k', date: '2026-12-03', billMonth: '2026-12', amountCents: 1000 }),
+    ];
+    const ahead = getMonthAhead(data(purchases, [], [checking, card]), TODAY);
+    expect(ahead.payable).toMatchObject([{ id: 'card:k:2026-12', description: 'Fatura Nubank', date: '2026-12-07', amountCents: 3500, kind: 'card' }]);
   });
 });
 
@@ -82,7 +92,7 @@ describe('contas vencidas no A pagar', () => {
     const luz = bill('luz', 5, { startMonth: '2026-11' });
     const net = bill('net', 20, { startMonth: '2026-11', paidMonths: ['2026-11'] });
     const ahead = getMonthAhead(data([], [luz, net]), TODAY);
-    expect(ahead.payable).toEqual([{ id: 'bill:luz:2026-11', description: 'luz', date: '2026-11-05', amountCents: 5000, kind: 'bill', overdue: true }]);
+    expect(ahead.payable).toMatchObject([{ id: 'bill:luz:2026-11', description: 'luz', date: '2026-11-05', amountCents: 5000, kind: 'bill', overdue: true, ref: { type: 'bill', billId: 'luz', monthKey: '2026-11' } }]);
     const confirmed = getMonthAhead(data([], [{ ...luz, paidMonths: ['2026-11'] }]), TODAY);
     expect(confirmed.payable).toEqual([]);
   });

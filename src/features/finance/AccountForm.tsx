@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { ACCOUNT_ICONS, AccountLogo } from '@/components/AccountLogo';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Screen } from '@/components/Screen';
@@ -33,6 +35,7 @@ export function AccountForm({ account, canDelete = false, onDelete }: AccountFor
   const [institution, setInstitution] = useState(account?.institution ?? '');
   const [type, setType] = useState<AccountType>(account?.type ?? 'checking');
   const [color, setColor] = useState(account?.color ?? accountColors[0]!);
+  const [icon, setIcon] = useState<string | undefined>(account?.icon);
   const [balanceDigits, setBalanceDigits] = useState(centsToAmountInput(account?.openingBalanceCents ?? 0));
   const [error, setError] = useState('');
 
@@ -44,6 +47,7 @@ export function AccountForm({ account, canDelete = false, onDelete }: AccountFor
       institution: institution.trim(),
       type,
       color,
+      icon,
       // Conta importada: o saldo inicial é ajustado pela sincronização (pode ser negativo).
       openingBalanceCents: account?.externalId ? account.openingBalanceCents : amountInputToCents(balanceDigits),
     };
@@ -57,9 +61,7 @@ export function AccountForm({ account, canDelete = false, onDelete }: AccountFor
       <ScreenHeader title={account ? 'Editar conta' : 'Nova conta'} showBack />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <Card style={styles.previewCard}>
-          <View style={[styles.previewLogo, { backgroundColor: `${color}20` }]}>
-            <View style={[styles.previewLogoInner, { backgroundColor: color }]} />
-          </View>
+          <AccountLogo color={color} icon={icon} logoUrl={account?.logoUrl} size={52} />
           <Text style={[styles.previewInstitution, { color: colors.textMuted, fontFamily: fonts.regular }]}>{institution || 'Instituição'}</Text>
           <Text style={[styles.previewName, { color: colors.text, fontFamily: fonts.semiBold }]}>{name || 'Nome da conta'}</Text>
         </Card>
@@ -94,7 +96,7 @@ export function AccountForm({ account, canDelete = false, onDelete }: AccountFor
 
         {account?.externalId ? (
           <Text style={[styles.hint, styles.field, { color: colors.textMuted, fontFamily: fonts.regular }]}>
-            Conta do Open Finance: o tipo e o saldo vêm do banco a cada sincronização. Aqui você muda só o nome, a instituição e a cor.
+            Conta do Open Finance: o tipo e o saldo vêm do banco a cada sincronização. Aqui você muda só o nome, a instituição, o ícone e a cor.
           </Text>
         ) : (
         <>
@@ -139,6 +141,28 @@ export function AccountForm({ account, canDelete = false, onDelete }: AccountFor
         )}
 
         <View style={styles.field}>
+          <Text style={[styles.label, { color: colors.textMuted, fontFamily: fonts.medium }]}>Ícone</Text>
+          {account?.logoUrl ? <Text style={[styles.hint, styles.iconHint, { color: colors.textMuted, fontFamily: fonts.regular }]}>O logo do banco aparece no lugar do ícone.</Text> : null}
+          <View style={styles.colorOptions}>
+            {ACCOUNT_ICONS.map((item) => {
+              const active = icon === item.name;
+              return (
+                <Pressable
+                  key={item.name}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ícone ${item.label}`}
+                  accessibilityState={{ selected: active }}
+                  onPress={() => setIcon(active ? undefined : item.name)}
+                  style={[styles.colorOption, { backgroundColor: active ? color : colors.surface, borderColor: active ? colors.text : colors.border }]}
+                >
+                  <Ionicons name={item.name} size={20} color={active ? colors.onColor : colors.text} />
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={styles.field}>
           <Text style={[styles.label, { color: colors.textMuted, fontFamily: fonts.medium }]}>Cor de identificação</Text>
           <View style={styles.colorOptions}>
             {accountColors.map((item) => (
@@ -172,8 +196,6 @@ export function AccountForm({ account, canDelete = false, onDelete }: AccountFor
 const styles = StyleSheet.create({
   content: { paddingHorizontal: 20, paddingBottom: 42 },
   previewCard: { alignItems: 'center', marginBottom: 24 },
-  previewLogo: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
-  previewLogoInner: { width: 19, height: 19, borderRadius: 10 },
   previewInstitution: { fontSize: 12, marginTop: 12 },
   previewName: { fontSize: 19, marginTop: 4 },
   field: { marginBottom: 21 },
@@ -186,6 +208,7 @@ const styles = StyleSheet.create({
   currency: { fontSize: 16 },
   balanceTextInput: { flex: 1, minWidth: 0, fontSize: 22, paddingVertical: 10, outlineStyle: 'none' } as never,
   hint: { fontSize: 11, lineHeight: 17, marginTop: 8 },
+  iconHint: { marginTop: 0, marginBottom: 9 },
   colorOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   colorOption: { width: 44, height: 44, borderRadius: 22, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   selectedColor: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#09090B' },
