@@ -6,10 +6,8 @@ export type DayMark = 'work' | 'off' | 'absence' | 'late' | 'sick';
 
 export interface WorkSettings {
   hourlyRateCents: number;
-  /** Tempo no trabalho por dia, em minutos (entrada à saída). */
-  shiftMinutes: number;
-  /** Almoço não pago, em minutos. Horas pagas = jornada − almoço. */
-  lunchMinutes: number;
+  /** Jornada paga por dia, em minutos (ex.: 07:20 = 440). Vale para todos os dias do mês, trabalho e folga. */
+  dailyMinutes: number;
   /** Adicional por feriado trabalhado (100 = recebe o dobro no dia). */
   holidayBonusPercent: number;
   /** Feriados que valem (ou não) na empresa, pelo nome. Ausente = padrão (nacionais sim; Carnaval e Corpus Christi não). */
@@ -40,8 +38,7 @@ export function defaultWorkSettings(today: string): WorkSettings {
   const sunday = addDays(today, -date.getDay());
   return {
     hourlyRateCents: 0,
-    shiftMinutes: 9 * 60,
-    lunchMinutes: 60,
+    dailyMinutes: 8 * 60,
     holidayBonusPercent: 100,
     holidayChoices: {},
     cycleStart: sunday,
@@ -153,18 +150,42 @@ export function dayMark(settings: WorkSettings, day: string): DayMark {
   return settings.overrides[day] ?? (scheduledWork(settings, day) ? 'work' : 'off');
 }
 
-export function paidMinutesPerDay(settings: WorkSettings): number {
-  return Math.max(0, settings.shiftMinutes - settings.lunchMinutes);
+/** "07:20" → 440 minutos; formato inválido, zero ou mais de 24 h → null. */
+export function clockToMinutes(value: string): number | null {
+  const match = /^(\d{1,2}):([0-5]\d)$/.exec(value.trim());
+  if (!match) return null;
+  const minutes = Number(match[1]) * 60 + Number(match[2]);
+  return minutes > 0 && minutes <= 24 * 60 ? minutes : null;
+}
+
+/** 440 → "07:20". */
+export function minutesToClock(minutes: number): string {
+  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+}
+
+/**
+ * Bruto do horista pelo calendário real: dias do período × jornada × valor da hora (dias trabalhados + folgas/DSR,
+ * sem o divisor fixo de 220 h). Tudo em inteiros, arredondando só no fim: 7h20 é 440 min, nunca 7,3333.
+ * Ex.: R$ 8,11 e 07:20 → 28 dias = R$ 1.665,25; 30 = R$ 1.784,20; 31 = R$ 1.843,67.
+ */
+export function calendarGrossCents(hourlyRateCents: number, dailyMinutes: number, periodDays: number): number {
+  return Math.round((hourlyRateCents * dailyMinutes * Math.max(0, periodDays)) / 60);
 }
 
 export interface MonthPay {
+  /** Dias do mês (28 a 31): base do salário. */
+  periodDays: number;
   workedDays: number;
+  /** Horas do período (dias do mês × jornada), em minutos. */
   paidMinutes: number;
   holidaysWorked: number;
   absences: number;
   lates: number;
   sickDays: number;
+  /** Dias do mês × jornada × valor da hora. */
   baseCents: number;
+  /** Cada falta tira 1 jornada. */
+  absenceCents: number;
   holidayExtraCents: number;
   /** Prêmio de assiduidade que entra no mês (zero se houve falta ou atraso). */
   attendanceBonusCents: number;
@@ -176,17 +197,20 @@ export interface MonthPay {
 }
 
 /**
- * Previsão do mês: cada dia trabalhado (ou com atestado) paga as horas do dia; feriado trabalhado ganha o
- * adicional. Falta não paga o dia. O prêmio de assiduidade entra se não houve falta nem atraso; atestado não tira.
+ * Previsão do mês pelo calendário: todos os dias do mês (trabalho e folga) pagam a jornada; cada falta tira
+ * 1 jornada; feriado trabalhado ganha o adicional. O prêmio de assiduidade entra sem falta nem atraso;
+ * atestado paga o dia e só tira o prêmio se a empresa for assim.
  */
 export function computeMonthPay(settings: WorkSettings, monthKey: string): MonthPay {
   const holidays = holidaysOf(Number(monthKey.slice(0, 4)), settings.holidayChoices);
-  const dayCents = Math.round((settings.hourlyRateCents * paidMinutesPerDay(settings)) / 60);
+  const days = daysOfMonth(monthKey);
+  const dayCents = Math.round((settings.hourlyRateCents * settings.dailyMinutes) / 60);
   const pay: MonthPay = {
-    workedDays: 0, paidMinutes: 0, holidaysWorked: 0, absences: 0, lates: 0, sickDays: 0,
-    baseCents: 0, holidayExtraCents: 0, attendanceBonusCents: 0, attendanceLost: false, penaltiesCents: 0, totalCents: 0,
+    periodDays: days.length, workedDays: 0, paidMinutes: days.length * settings.dailyMinutes, holidaysWorked: 0, absences: 0, lates: 0, sickDays: 0,
+    baseCents: calendarGrossCents(settings.hourlyRateCents, settings.dailyMinutes, days.length),
+    absenceCents: 0, holidayExtraCents: 0, attendanceBonusCents: 0, attendanceLost: false, penaltiesCents: 0, totalCents: 0,
   };
-  for (const day of daysOfMonth(monthKey)) {
+  for (const day of days) {
     const mark = dayMark(settings, day);
     if (mark === 'off') continue;
     if (mark === 'absence') {
@@ -194,8 +218,6 @@ export function computeMonthPay(settings: WorkSettings, monthKey: string): Month
       continue;
     }
     pay.workedDays += 1;
-    pay.paidMinutes += paidMinutesPerDay(settings);
-    pay.baseCents += dayCents;
     if (mark === 'sick') pay.sickDays += 1;
     if (mark === 'late') {
       pay.lates += 1;
@@ -206,10 +228,12 @@ export function computeMonthPay(settings: WorkSettings, monthKey: string): Month
       pay.holidayExtraCents += Math.round((dayCents * settings.holidayBonusPercent) / 100);
     }
   }
+  // Desconto exato das faltas (mesma conta do bruto, sem somar arredondamentos de cada dia).
+  pay.absenceCents = pay.baseCents - calendarGrossCents(settings.hourlyRateCents, settings.dailyMinutes, days.length - pay.absences);
   const lost = pay.absences > 0 || pay.lates > 0 || (settings.sickLosesBonus && pay.sickDays > 0);
   pay.attendanceLost = settings.attendanceBonusCents > 0 && lost;
   pay.attendanceBonusCents = lost ? 0 : settings.attendanceBonusCents;
-  pay.totalCents = Math.max(0, pay.baseCents + pay.holidayExtraCents + pay.attendanceBonusCents - pay.penaltiesCents);
+  pay.totalCents = Math.max(0, pay.baseCents - pay.absenceCents + pay.holidayExtraCents + pay.attendanceBonusCents - pay.penaltiesCents);
   return pay;
 }
 
@@ -302,6 +326,16 @@ function sanitizeChoices(raw: Record<string, unknown>): Record<string, boolean> 
   return choices;
 }
 
+/** Jornada paga salva; a versão anterior guardava "horas no trabalho" e "almoço" (jornada = diferença). */
+function dailyMinutesOf(raw: Record<string, unknown>, fallback: number): number {
+  const valid = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= 24 * 60;
+  if (valid(raw.dailyMinutes)) return raw.dailyMinutes;
+  const shift = typeof raw.shiftMinutes === 'number' ? raw.shiftMinutes : NaN;
+  const lunch = typeof raw.lunchMinutes === 'number' ? raw.lunchMinutes : 0;
+  const old = shift - lunch;
+  return valid(old) ? old : fallback;
+}
+
 /** Lê o que foi salvo; campo ausente ou inválido volta ao padrão. */
 export function sanitizeWorkSettings(value: unknown, today: string): WorkSettings | undefined {
   if (!value || typeof value !== 'object') return undefined;
@@ -321,8 +355,7 @@ export function sanitizeWorkSettings(value: unknown, today: string): WorkSetting
     : base.cycle;
   return {
     hourlyRateCents: int(raw.hourlyRateCents, 0, 100_000_00),
-    shiftMinutes: int(raw.shiftMinutes, base.shiftMinutes, 24 * 60),
-    lunchMinutes: int(raw.lunchMinutes, base.lunchMinutes, 24 * 60),
+    dailyMinutes: dailyMinutesOf(raw, base.dailyMinutes),
     holidayBonusPercent: int(raw.holidayBonusPercent, base.holidayBonusPercent, 500),
     holidayChoices: sanitizeChoices(raw),
     cycleStart: typeof raw.cycleStart === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.cycleStart) ? raw.cycleStart : base.cycleStart,

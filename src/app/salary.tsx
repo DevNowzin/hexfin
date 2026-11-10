@@ -22,6 +22,8 @@ import {
   cyclePattern,
   MAX_CYCLE_PART,
   toggleCycleDay,
+  clockToMinutes,
+  minutesToClock,
   type DayMark,
   type WorkSettings,
 } from '@/features/work/payroll';
@@ -36,14 +38,6 @@ function shortDate(value: string): string {
   return parseLocalDate(value).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
 
-/** "8,5" ou "8:30" → minutos; inválido → null. */
-function hoursToMinutes(text: string): number | null {
-  const clock = /^(\d{1,2}):(\d{2})$/.exec(text.trim());
-  if (clock) return Number(clock[1]) * 60 + Number(clock[2]);
-  const value = Number(text.replace(',', '.'));
-  return Number.isFinite(value) && value >= 0 && value <= 24 ? Math.round(value * 60) : null;
-}
-
 function minutesToHours(minutes: number): string {
   const hours = minutes / 60;
   return Number.isInteger(hours) ? String(hours) : hours.toFixed(2).replace('.', ',').replace(/0$/, '');
@@ -56,8 +50,7 @@ export default function SalaryScreen() {
   const settings: WorkSettings = work ?? defaultWorkSettings(today);
   const [monthKey, setMonthKey] = useState(getCurrentMonthKey());
   const [mode, setMode] = useState<Mode>('cycle');
-  const [shiftText, setShiftText] = useState(minutesToHours(settings.shiftMinutes));
-  const [lunchText, setLunchText] = useState(String(settings.lunchMinutes));
+  const [dailyText, setDailyText] = useState(minutesToClock(settings.dailyMinutes));
   const pattern = cyclePattern(settings.cycle);
   const [workDaysText, setWorkDaysText] = useState(String(pattern?.[0] ?? 6));
   const [offDaysText, setOffDaysText] = useState(String(pattern?.[1] ?? 1));
@@ -157,7 +150,7 @@ export default function SalaryScreen() {
           <Text style={labelStyle}>Previsto para {monthName}</Text>
           <AmountText cents={pay.totalCents} color={colors.income} style={styles.total} />
           <Text style={[styles.meta, { color: colors.textMuted, fontFamily: fonts.regular }]}>
-            {pay.workedDays} dias · {minutesToHours(pay.paidMinutes)} h pagas
+            {pay.periodDays} dias × {minutesToClock(settings.dailyMinutes)} = {minutesToHours(pay.paidMinutes)} h · {pay.workedDays} de trabalho
             {pay.holidaysWorked > 0 ? ` · ${pay.holidaysWorked} ${pay.holidaysWorked === 1 ? 'feriado' : 'feriados'} (+R$ ${formatAmountInput(String(pay.holidayExtraCents))})` : ''}
           </Text>
           {pay.attendanceBonusCents > 0 ? (
@@ -168,7 +161,7 @@ export default function SalaryScreen() {
           {pay.absences > 0 || pay.lates > 0 || (pay.attendanceLost && pay.sickDays > 0) ? (
             <Text style={[styles.meta, { color: colors.expense, fontFamily: fonts.regular }]}>
               {[
-                pay.absences > 0 ? `${pay.absences} ${pay.absences === 1 ? 'falta (dia não pago)' : 'faltas (dias não pagos)'}` : null,
+                pay.absences > 0 ? `${pay.absences} ${pay.absences === 1 ? 'falta' : 'faltas'} (− R$ ${formatAmountInput(String(pay.absenceCents))})` : null,
                 pay.lates > 0 ? `${pay.lates} ${pay.lates === 1 ? 'atraso' : 'atrasos'}${pay.penaltiesCents > 0 ? ` (− R$ ${formatAmountInput(String(pay.penaltiesCents))})` : ''}` : null,
                 pay.attendanceLost ? 'perdeu a assiduidade' : null,
               ]
@@ -314,37 +307,25 @@ export default function SalaryScreen() {
         </View>
         <View style={styles.fieldRow}>
           <View style={styles.fieldHalf}>
-            <Text style={labelStyle}>Horas no trabalho por dia</Text>
+            <Text style={labelStyle}>Jornada paga por dia</Text>
             <TextInput
-              accessibilityLabel="Horas no trabalho por dia"
-              value={shiftText}
+              accessibilityLabel="Jornada paga por dia em horas e minutos"
+              value={dailyText}
               onChangeText={(text) => {
-                setShiftText(text);
-                const minutes = hoursToMinutes(text);
-                if (minutes !== null) save({ shiftMinutes: minutes });
+                const digits = text.replace(/\D/g, '').slice(0, 4);
+                const masked = digits.length > 2 ? `${digits.slice(0, digits.length - 2)}:${digits.slice(-2)}` : digits;
+                setDailyText(masked);
+                const minutes = clockToMinutes(masked);
+                if (minutes !== null) save({ dailyMinutes: minutes });
               }}
-              keyboardType="numbers-and-punctuation"
-              placeholder="Ex.: 9 ou 8:30"
+              keyboardType="number-pad"
+              placeholder="Ex.: 07:20"
               placeholderTextColor={colors.textMuted}
               selectionColor={colors.primary}
               style={inputStyle}
             />
           </View>
-          <View style={styles.fieldHalf}>
-            <Text style={labelStyle}>Almoço (minutos, não pago)</Text>
-            <TextInput
-              accessibilityLabel="Almoço em minutos"
-              value={lunchText}
-              onChangeText={(text) => {
-                const digits = text.replace(/\D/g, '').slice(0, 3);
-                setLunchText(digits);
-                save({ lunchMinutes: Number(digits || '0') });
-              }}
-              keyboardType="number-pad"
-              selectionColor={colors.primary}
-              style={inputStyle}
-            />
-          </View>
+          <View style={styles.fieldHalf} />
         </View>
         <View style={styles.fieldRow}>
           {moneyField('Prêmio de assiduidade (R$)', settings.attendanceBonusCents, (cents) => save({ attendanceBonusCents: cents }))}
@@ -372,7 +353,7 @@ export default function SalaryScreen() {
           <View style={styles.fieldHalf} />
         </View>
         <Text style={[styles.hint, { color: colors.textMuted, fontFamily: fonts.regular }]}>
-          Horas pagas por dia: {minutesToHours(Math.max(0, settings.shiftMinutes - settings.lunchMinutes))} h. Pagamento no dia 15 e no último dia do mês; domingo ou segunda antecipa para o sábado.
+          O salário conta todos os dias do mês (trabalho e folga): dias do mês × jornada × valor da hora. Cada falta tira 1 jornada. Pagamento no dia 15 e no último dia do mês; domingo ou segunda antecipa para o sábado.
         </Text>
 
         <SectionHeader title={`Feriados de ${monthKey.slice(0, 4)} na sua empresa`} />

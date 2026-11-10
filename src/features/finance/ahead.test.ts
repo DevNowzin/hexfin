@@ -103,10 +103,10 @@ describe('salário previsto no A receber', () => {
     const work = { ...defaultWorkSettings(TODAY), hourlyRateCents: 1000 };
     const ahead = getMonthAhead({ ...data([]), work }, TODAY);
     expect(ahead.receivable.map((item) => [item.description, item.date, item.amountCents])).toEqual([
-      ['Salário · 1ª quinzena', '2026-11-14', 86400],
-      ['Salário · 2ª quinzena', '2026-11-28', 129600],
+      ['Salário · 1ª quinzena', '2026-11-14', 102400],
+      ['Salário · 2ª quinzena', '2026-11-28', 153600],
     ]);
     const early = getMonthAhead({ ...data([]), work: { ...work, receivedEarly: ['2026-11:1'] } }, TODAY);
-    expect(early.receivableCents).toBe(129600);
+    expect(early.receivableCents).toBe(153600);
   });
 });

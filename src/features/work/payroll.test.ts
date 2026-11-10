@@ -3,12 +3,15 @@ import {
   addDays,
   adjustPayday,
   buildCycle,
+  calendarGrossCents,
+  clockToMinutes,
   cyclePattern,
   computeMonthPay,
   defaultWorkSettings,
   easterSunday,
   holidayList,
   holidaysOf,
+  minutesToClock,
   monthPayments,
   nextDayMark,
   sanitizeWorkSettings,
@@ -18,7 +21,8 @@ import {
   type WorkSettings,
 } from './payroll';
 
-// R$ 10/h, 9 h no trabalho com 1 h de almoço = 8 h pagas = R$ 80 por dia. Segunda a sábado.
+// R$ 10/h e jornada de 08:00 = R$ 80 por dia; o mês paga todos os dias do calendário. Escala de segunda a sábado.
+// Novembro/2026 tem 30 dias: 30 × R$ 80 = R$ 2.400, mais R$ 160 dos feriados de 02 e 20/11 trabalhados.
 function settings(overrides: Partial<WorkSettings> = {}): WorkSettings {
   return { ...defaultWorkSettings('2026-11-10'), hourlyRateCents: 1000, ...overrides };
 }
@@ -40,46 +44,70 @@ describe('feriados', () => {
     expect(holidaysOf(2026, { Finados: false }).has('2026-11-02')).toBe(false);
     expect(holidayList(2026, { Finados: false }).find((holiday) => holiday.name === 'Finados')).toMatchObject({ date: '2026-11-02', counts: false });
     // Feriado desligado vira dia comum: novembro fica com 1 feriado trabalhado.
-    expect(computeMonthPay(settings({ holidayChoices: { Finados: false } }), '2026-11')).toMatchObject({ holidaysWorked: 1, totalCents: 208000 });
+    expect(computeMonthPay(settings({ holidayChoices: { Finados: false } }), '2026-11')).toMatchObject({ holidaysWorked: 1, totalCents: 248000 });
+  });
+});
+
+describe('salário pelo calendário real', () => {
+  it('jornada HH:MM vira minutos sem arredondar (07:20 = 440)', () => {
+    expect(clockToMinutes('07:20')).toBe(440);
+    expect(clockToMinutes('7:05')).toBe(425);
+    expect(minutesToClock(440)).toBe('07:20');
+    expect([clockToMinutes('7,33'), clockToMinutes('07:60'), clockToMinutes('00:00'), clockToMinutes('25:00')]).toEqual([null, null, null, null]);
+  });
+
+  it('massa de teste: R$ 8,11/h e 07:20 → 28 dias 1.665,25; 30 dias 1.784,20; 31 dias 1.843,67', () => {
+    expect(calendarGrossCents(811, 440, 28)).toBe(166525);
+    expect(calendarGrossCents(811, 440, 30)).toBe(178420);
+    expect(calendarGrossCents(811, 440, 31)).toBe(184367);
+  });
+
+  it('o mês usa os próprios dias (fevereiro 28, novembro 30, dezembro 31)', () => {
+    const real = settings({ hourlyRateCents: 811, dailyMinutes: 440, holidayChoices: { Natal: false, 'Confraternização Universal': false } });
+    expect(computeMonthPay(real, '2027-02')).toMatchObject({ periodDays: 28, baseCents: 166525 });
+    expect(computeMonthPay(real, '2026-11')).toMatchObject({ periodDays: 30, baseCents: 178420, paidMinutes: 30 * 440 });
+    expect(computeMonthPay(real, '2026-12')).toMatchObject({ periodDays: 31, baseCents: 184367, totalCents: 184367 });
   });
 });
 
 describe('computeMonthPay', () => {
-  it('novembro/2026: 25 dias, feriados de 02/11 e 20/11 trabalhados em dobro', () => {
+  it('novembro/2026: 30 dias de jornada, feriados de 02/11 e 20/11 trabalhados em dobro', () => {
     const pay = computeMonthPay(settings(), '2026-11');
-    expect(pay).toMatchObject({ workedDays: 25, holidaysWorked: 2, baseCents: 200000, holidayExtraCents: 16000, totalCents: 216000 });
-    expect(pay.paidMinutes).toBe(25 * 8 * 60);
+    expect(pay).toMatchObject({ periodDays: 30, workedDays: 25, holidaysWorked: 2, baseCents: 240000, absenceCents: 0, holidayExtraCents: 16000, totalCents: 256000 });
+    expect(pay.paidMinutes).toBe(30 * 8 * 60);
   });
 
   it('mês de 31 dias rende mais que o de 30', () => {
     expect(computeMonthPay(settings(), '2026-10').workedDays).toBe(27);
-    expect(computeMonthPay(settings(), '2026-10').totalCents).toBeGreaterThan(computeMonthPay(settings(), '2026-11').totalCents);
+    // Base pelo calendário: 31 × R$ 80 = R$ 2.480 contra 30 × R$ 80 = R$ 2.400 (o total ainda depende dos feriados de cada mês).
+    expect(computeMonthPay(settings(), '2026-10').baseCents).toBe(248000);
+    expect(computeMonthPay(settings(), '2026-11').baseCents).toBe(240000);
   });
 
   it('assiduidade (ex.: R$ 150) entra no mês sem falta nem atraso', () => {
-    expect(computeMonthPay(settings({ attendanceBonusCents: 15000 }), '2026-11')).toMatchObject({ attendanceBonusCents: 15000, attendanceLost: false, totalCents: 231000 });
+    expect(computeMonthPay(settings({ attendanceBonusCents: 15000 }), '2026-11')).toMatchObject({ attendanceBonusCents: 15000, attendanceLost: false, totalCents: 271000 });
   });
 
-  it('falta: não paga o dia e perde a assiduidade inteira (uma vez só)', () => {
+  it('falta: tira 1 jornada cada e perde a assiduidade inteira (uma vez só)', () => {
     const twoAbsences = settings({ attendanceBonusCents: 15000, overrides: { '2026-11-03': 'absence', '2026-11-04': 'absence' } });
-    expect(computeMonthPay(twoAbsences, '2026-11')).toMatchObject({ workedDays: 23, absences: 2, attendanceBonusCents: 0, attendanceLost: true, penaltiesCents: 0, totalCents: 200000 });
+    expect(computeMonthPay(twoAbsences, '2026-11')).toMatchObject({ workedDays: 23, absences: 2, absenceCents: 16000, attendanceBonusCents: 0, attendanceLost: true, penaltiesCents: 0, totalCents: 240000 });
   });
 
   it('atestado paga o dia e não tira a assiduidade', () => {
     const sick = settings({ attendanceBonusCents: 15000, overrides: { '2026-11-04': 'sick' } });
-    expect(computeMonthPay(sick, '2026-11')).toMatchObject({ workedDays: 25, sickDays: 1, attendanceBonusCents: 15000, totalCents: 231000 });
+    expect(computeMonthPay(sick, '2026-11')).toMatchObject({ workedDays: 25, sickDays: 1, absenceCents: 0, attendanceBonusCents: 15000, totalCents: 271000 });
   });
 
   it('atestado tira a assiduidade quando a empresa é assim (o dia continua pago)', () => {
     const strict = settings({ attendanceBonusCents: 15000, sickLosesBonus: true, overrides: { '2026-11-04': 'sick' } });
-    expect(computeMonthPay(strict, '2026-11')).toMatchObject({ workedDays: 25, sickDays: 1, attendanceBonusCents: 0, attendanceLost: true, totalCents: 216000 });
+    expect(computeMonthPay(strict, '2026-11')).toMatchObject({ workedDays: 25, sickDays: 1, attendanceBonusCents: 0, attendanceLost: true, totalCents: 256000 });
     expect(sanitizeWorkSettings({ sickLosesBonus: true }, '2026-11-10')?.sickLosesBonus).toBe(true);
     expect(sanitizeWorkSettings({}, '2026-11-10')?.sickLosesBonus).toBe(false);
   });
 
   it('atraso paga o dia, desconta o atraso e também tira a assiduidade', () => {
     const late = settings({ attendanceBonusCents: 15000, latePenaltyCents: 2000, overrides: { '2026-11-05': 'late' } });
-    expect(computeMonthPay(late, '2026-11')).toMatchObject({ workedDays: 25, lates: 1, attendanceLost: true, penaltiesCents: 2000, totalCents: 214000 });
+    expect(computeMonthPay(late, '2026-11')).toMatchObject({ workedDays: 25, lates: 1, attendanceLost: true, penaltiesCents: 2000, totalCents: 254000 });
   });
 
   it('sem valor da hora, nada a receber', () => {
@@ -97,14 +125,14 @@ describe('quinzenas', () => {
 
   it('40% no dia 15 e o resto no último dia', () => {
     expect(monthPayments(settings(), '2026-11')).toEqual([
-      { id: '2026-11:1', label: 'Salário · 1ª quinzena', date: '2026-11-14', amountCents: 86400 },
-      { id: '2026-11:2', label: 'Salário · 2ª quinzena', date: '2026-11-28', amountCents: 129600 },
+      { id: '2026-11:1', label: 'Salário · 1ª quinzena', date: '2026-11-14', amountCents: 102400 },
+      { id: '2026-11:2', label: 'Salário · 2ª quinzena', date: '2026-11-28', amountCents: 153600 },
     ]);
   });
 
   it('100% vira um pagamento só no fim do mês', () => {
     expect(monthPayments(settings({ firstPaymentPercent: 100 }), '2026-11')).toEqual([
-      { id: '2026-11:2', label: 'Salário', date: '2026-11-28', amountCents: 216000 },
+      { id: '2026-11:2', label: 'Salário', date: '2026-11-28', amountCents: 256000 },
     ]);
   });
 
@@ -172,5 +200,12 @@ describe('escala no calendário', () => {
     const old = sanitizeWorkSettings({ absencePenaltyCents: 15000, optionalHolidays: true }, '2026-11-10');
     expect(old?.attendanceBonusCents).toBe(15000);
     expect(old?.holidayChoices).toEqual({ Carnaval: true, 'Corpus Christi': true });
+  });
+
+  it('dados da versão anterior: horas no trabalho menos almoço viram a jornada paga', () => {
+    expect(sanitizeWorkSettings({ shiftMinutes: 540, lunchMinutes: 60 }, '2026-11-10')?.dailyMinutes).toBe(480);
+    expect(sanitizeWorkSettings({ shiftMinutes: 500, lunchMinutes: 60 }, '2026-11-10')?.dailyMinutes).toBe(440);
+    expect(sanitizeWorkSettings({ dailyMinutes: 440, shiftMinutes: 540 }, '2026-11-10')?.dailyMinutes).toBe(440);
+    expect(sanitizeWorkSettings({}, '2026-11-10')?.dailyMinutes).toBe(480);
   });
 });
