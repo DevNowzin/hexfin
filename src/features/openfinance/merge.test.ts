@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getAccountBalance, getMonthSummary, getTotalBalance } from '@/features/finance/selectors';
 import type { FinanceData, Transaction } from '@/features/finance/types';
-import { describeImport, importedStatus, mergeOpenFinance } from './merge';
+import { applyCardCycle, describeImport, importedStatus, mergeOpenFinance } from './merge';
 import type { OpenFinanceSnapshot, SnapshotAccount, SnapshotTransaction } from './types';
 
 const NOW = '2026-11-10T12:00:00.000Z';
@@ -216,5 +216,27 @@ describe('logo do banco', () => {
     expect(before.accounts[0]!.logoUrl).toBeUndefined();
     const after = mergeOpenFinance(before, snapshot([{ ...account('k1', 'checking', 1000, []), logoUrl }]), NOW, ids()).data;
     expect(after.accounts[0]!.logoUrl).toBe(logoUrl);
+  });
+});
+
+describe('ciclo do cartão informado pela pessoa', () => {
+  const cycle = { closeDate: '2026-10-29', dueDate: '2026-11-05' };
+  const purchases = [tx('c1', { date: '2026-11-05' }), tx('c2', { date: '2026-11-28', amountCents: 3403 })];
+
+  it('sem as datas do banco, a compra fica no mês da data até a pessoa informar o ciclo; aí vai para a fatura certa', () => {
+    const before = mergeOpenFinance(empty(), snapshot([account('k1', 'credit', 4403, purchases)]), NOW, ids()).data;
+    expect(byExternal(before, 'pluggy:c2').billMonth).toBeUndefined();
+    const cardId = before.accounts[0]!.id;
+    const fixed = applyCardCycle(before, cardId, cycle);
+    expect(fixed.accounts[0]!.billCycle).toEqual(cycle);
+    expect([byExternal(fixed, 'pluggy:c1').billMonth, byExternal(fixed, 'pluggy:c2').billMonth]).toEqual(['2026-12', '2027-01']);
+  });
+
+  it('a próxima sincronização sem datas do banco mantém o ciclo informado', () => {
+    const first = mergeOpenFinance(empty(), snapshot([account('k1', 'credit', 4403, purchases)]), NOW, ids()).data;
+    const fixed = applyCardCycle(first, first.accounts[0]!.id, cycle);
+    const again = mergeOpenFinance(fixed, snapshot([account('k1', 'credit', 4403, purchases)]), NOW, ids()).data;
+    expect(again.accounts[0]!.billCycle).toEqual(cycle);
+    expect([byExternal(again, 'pluggy:c1').billMonth, byExternal(again, 'pluggy:c2').billMonth]).toEqual(['2026-12', '2027-01']);
   });
 });

@@ -217,6 +217,24 @@ export function billStatusFor(monthKey: string, cycle: BillCycle, today: string)
   return { closed: today >= dates.closeDate, ...dates };
 }
 
+/** Dia do vencimento e quantos dias antes a fatura fecha, tirados do ciclo guardado. */
+export function billRuleOf(cycle: BillCycle): { dueDay: number; closeOffsetDays: number } {
+  return cycleRule(cycle);
+}
+
+export const MAX_CLOSE_OFFSET_DAYS = 20;
+
+/** Ciclo a partir do que a pessoa informou (vencimento e dias antes do fechamento), quando o banco não manda as datas. */
+export function billCycleFromRule(dueDay: number, closeOffsetDays: number, today: string): BillCycle | null {
+  if (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) return null;
+  if (!Number.isInteger(closeOffsetDays) || closeOffsetDays < 1 || closeOffsetDays > MAX_CLOSE_OFFSET_DAYS) return null;
+  const index = monthIndex(today);
+  const year = Math.floor(index / 12);
+  const month = index % 12;
+  const dueDate = toDateInput(new Date(year, month, Math.min(dueDay, new Date(year, month + 1, 0).getDate()), 12));
+  return { closeDate: closeDateFor(index, dueDay, closeOffsetDays), dueDate };
+}
+
 export function billMonthFor(date: string, cycle: BillCycle): string {
   const { dueDay, closeOffsetDays } = cycleRule(cycle);
   let index = monthIndex(date);

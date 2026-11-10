@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Image, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Image } from 'expo-image';
+import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useAppTheme } from '@/theme/AppTheme';
 
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -46,7 +47,8 @@ export function AccountLogo({ color, icon, logoUrl, initial, size = 44, style }:
   if (logoUrl && !failed) {
     return (
       <View style={[styles.base, round, { backgroundColor: colors.surfaceElevated }, style]}>
-        <Image source={{ uri: logoUrl }} onError={() => setFailed(true)} style={round} resizeMode="cover" accessibilityIgnoresInvertColors />
+        {/* expo-image: o logo do Pluggy vem em SVG, que o Image do React Native não desenha no Android. */}
+        <Image source={{ uri: logoUrl }} onError={() => setFailed(true)} style={round} contentFit="contain" cachePolicy="disk" />
       </View>
     );
   }

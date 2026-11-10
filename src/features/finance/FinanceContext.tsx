@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
-import { mergeOpenFinance } from '@/features/openfinance/merge';
-import type { ImportReport, OpenFinanceSnapshot } from '@/features/openfinance/types';
+import { applyCardCycle, mergeOpenFinance } from '@/features/openfinance/merge';
+import type { BillCycle, ImportReport, OpenFinanceSnapshot } from '@/features/openfinance/types';
 import { createId } from '@/utils/id';
 import type { WorkSettings } from '@/features/work/payroll';
 import { setBillMonthPaid } from './bills';
@@ -40,6 +40,8 @@ interface FinanceContextValue extends FinanceData {
   clearData: () => void;
   /** Aplica um retrato do Open Finance (regras em `mergeOpenFinance`) e devolve o resumo. */
   importOpenFinance: (snapshot: OpenFinanceSnapshot) => ImportReport;
+  /** Ciclo da fatura informado pela pessoa: recoloca as compras do cartão na fatura certa. */
+  setCardCycle: (accountId: string, cycle: BillCycle) => void;
 }
 
 const FinanceContext = createContext<FinanceContextValue | null>(null);
@@ -148,6 +150,10 @@ export function FinanceProvider({ children }: PropsWithChildren) {
     setData((current) => ({ ...current, bills: (current.bills ?? []).filter((bill) => bill.id !== id) }));
   }, []);
 
+  const setCardCycle = useCallback((accountId: string, cycle: BillCycle) => {
+    setData((current) => applyCardCycle(current, accountId, cycle));
+  }, []);
+
   const updateProfile = useCallback((patch: Partial<Profile>) => {
     setData((current) => ({ ...current, profile: { ...current.profile, ...patch } }));
   }, []);
@@ -193,6 +199,7 @@ export function FinanceProvider({ children }: PropsWithChildren) {
       toggleBalances,
       clearData,
       importOpenFinance,
+      setCardCycle,
     }),
     [
       data,
@@ -212,6 +219,7 @@ export function FinanceProvider({ children }: PropsWithChildren) {
       toggleBalances,
       clearData,
       importOpenFinance,
+      setCardCycle,
     ],
   );
 

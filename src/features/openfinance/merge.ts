@@ -13,6 +13,7 @@
 import { localCategorize } from '@/features/ai/categorize';
 import { getAccountBalance } from '@/features/finance/selectors';
 import type { Account, AccountType, FinanceData, Transaction } from '@/features/finance/types';
+import { billMonthFor } from './normalize';
 import type { BillCycle, ImportReport, OpenFinanceSnapshot, SnapshotTransaction } from './types';
 
 const IMPORTED_COLORS: Record<AccountType, string> = {
@@ -175,7 +176,10 @@ export function mergeOpenFinance(
   for (const { source, account } of synced) {
     const cards = cardsByItem.get(source.itemId) ?? [];
     const cardAccountId = source.kind !== 'credit' && cards.length === 1 ? cards[0] : undefined;
-    for (const item of source.transactions) {
+    // Banco sem fechamento e vencimento: vale o ciclo que a pessoa informou no cartão.
+    const fallbackCycle = source.kind === 'credit' && !source.billCycle ? account.billCycle : undefined;
+    for (const raw of source.transactions) {
+      const item = fallbackCycle ? { ...raw, billMonth: billMonthFor(raw.date, fallbackCycle) } : raw;
       if (source.kind === 'credit' && item.cardPayment) continue;
       const previous = previousByExternalId.get(item.externalId);
       const status = importedStatus(item, source.kind, snapshot.today);
@@ -209,6 +213,17 @@ export function mergeOpenFinance(
   });
 
   return { data: { ...data, accounts: anchored, transactions }, report };
+}
+
+/** Guarda o ciclo da fatura no cartão e recoloca cada compra dele na fatura certa. */
+export function applyCardCycle(data: FinanceData, accountId: string, cycle: BillCycle): FinanceData {
+  return {
+    ...data,
+    accounts: data.accounts.map((account) => (account.id === accountId ? { ...account, billCycle: cycle } : account)),
+    transactions: data.transactions.map((transaction) =>
+      transaction.accountId === accountId && !transaction.billPayment ? { ...transaction, billMonth: billMonthFor(transaction.date, cycle) } : transaction,
+    ),
+  };
 }
 
 function countLabel(count: number, one: string, many: string): string | null {

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  billCycleFromRule,
+  billRuleOf,
   connectorInfo,
   addDays,
   billDatesFor,
@@ -242,5 +244,23 @@ describe('connectorInfo', () => {
     expect(connectorInfo({ connector: { name: 'Inter', imageUrl: 'http://exemplo/logo.png' } })).toEqual({ institution: 'Inter' });
     expect(connectorInfo({ connector: { name: 'Inter', imageUrl: 'javascript:alert(1)' } })).toEqual({ institution: 'Inter' });
     expect(connectorInfo(null)).toEqual({ institution: 'Open Finance' });
+  });
+});
+
+describe('ciclo informado pela pessoa (banco sem fechamento e vencimento)', () => {
+  it('vence dia 5 e fecha 7 dias antes: compra até 27/11 vai para a fatura de dezembro, de 28/11 em diante para a de janeiro', () => {
+    const cycle = billCycleFromRule(5, 7, '2026-11-10')!;
+    expect(cycle).toEqual({ closeDate: '2026-10-29', dueDate: '2026-11-05' });
+    expect(billRuleOf(cycle)).toEqual({ dueDay: 5, closeOffsetDays: 7 });
+    expect(billMonthFor('2026-11-27', cycle)).toBe('2026-12');
+    expect(billMonthFor('2026-11-28', cycle)).toBe('2027-01');
+    expect(billMonthFor('2026-10-28', cycle)).toBe('2026-11');
+  });
+
+  it('recusa dia ou distância fora do intervalo', () => {
+    expect(billCycleFromRule(0, 7, '2026-11-10')).toBeNull();
+    expect(billCycleFromRule(32, 7, '2026-11-10')).toBeNull();
+    expect(billCycleFromRule(5, 0, '2026-11-10')).toBeNull();
+    expect(billCycleFromRule(5, 21, '2026-11-10')).toBeNull();
   });
 });

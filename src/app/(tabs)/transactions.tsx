@@ -59,6 +59,7 @@ export default function TransactionsScreen() {
   // Com um só cartão com ciclo informado, diz se a fatura do mês já fechou (a pagar) ou ainda está aberta.
   const cycles = accounts.flatMap((account) => (account.type === 'credit' && account.billCycle ? [account.billCycle] : []));
   const billStatus = cycles.length === 1 ? billStatusFor(monthKey, cycles[0]!, toDateInput()) : null;
+  const cardWithoutCycle = accounts.find((account) => account.type === 'credit' && !account.billCycle);
 
   return (
     <Screen>
@@ -129,6 +130,18 @@ export default function TransactionsScreen() {
                   ? `Fechada em ${shortDate(billStatus.closeDate)} · vence ${shortDate(billStatus.dueDate)}`
                   : `Aberta · fecha ${shortDate(billStatus.closeDate)} · vence ${shortDate(billStatus.dueDate)}`}
               </Text>
+            ) : null}
+            {cardWithoutCycle ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Informar o vencimento de ${cardWithoutCycle.name}`}
+                onPress={() => router.push(`/accounts/${cardWithoutCycle.id}/edit`)}
+                style={({ pressed }) => [styles.cycleHint, { borderColor: colors.warning, opacity: pressed ? 0.7 : 1 }]}
+              >
+                <Text style={[styles.billMeta, { color: colors.warning, fontFamily: fonts.medium }]}>
+                  {cardWithoutCycle.name}: o banco não informou o fechamento. Toque para informar o vencimento e a fatura ficar certa.
+                </Text>
+              </Pressable>
             ) : null}
             <Text style={[styles.billMeta, { color: colors.textMuted, fontFamily: fonts.regular }]}>
               {bill.count} {bill.count === 1 ? 'lançamento' : 'lançamentos'}
@@ -216,6 +229,7 @@ const styles = StyleSheet.create({
   billCard: { marginTop: 14 },
   billTotal: { fontSize: 26, marginTop: 4, letterSpacing: -0.6 },
   billMeta: { fontSize: 12, lineHeight: 18, marginTop: 6 },
+  cycleHint: { marginTop: 10, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, paddingBottom: 8 },
   billMetaAmount: { fontSize: 12 },
   summaryDivider: { width: StyleSheet.hairlineWidth, height: 32 },
   resultHeader: { marginTop: 24, marginBottom: 6 },

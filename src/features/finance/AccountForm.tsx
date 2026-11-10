@@ -9,6 +9,8 @@ import { Screen } from '@/components/Screen';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { useAppTheme } from '@/theme/AppTheme';
 import { amountInputToCents, centsToAmountInput, formatAmountInput } from '@/utils/format';
+import { billCycleFromRule, billRuleOf, MAX_CLOSE_OFFSET_DAYS } from '@/features/openfinance/normalize';
+import { toDateInput } from '@/utils/format';
 import { useFinance } from './FinanceContext';
 import type { Account, AccountType } from './types';
 
@@ -28,7 +30,7 @@ interface AccountFormProps {
 }
 
 export function AccountForm({ account, canDelete = false, onDelete }: AccountFormProps) {
-  const { addAccount, updateAccount } = useFinance();
+  const { addAccount, updateAccount, setCardCycle } = useFinance();
   const { colors, fonts } = useAppTheme();
   const router = useRouter();
   const [name, setName] = useState(account?.name ?? '');
@@ -38,10 +40,19 @@ export function AccountForm({ account, canDelete = false, onDelete }: AccountFor
   const [icon, setIcon] = useState<string | undefined>(account?.icon);
   const [balanceDigits, setBalanceDigits] = useState(centsToAmountInput(account?.openingBalanceCents ?? 0));
   const [error, setError] = useState('');
+  const isCard = account?.type === 'credit';
+  const rule = account?.billCycle ? billRuleOf(account.billCycle) : null;
+  const [dueDay, setDueDay] = useState(rule ? String(rule.dueDay) : '');
+  const [closeOffset, setCloseOffset] = useState(rule ? String(rule.closeOffsetDays) : '');
 
   function save() {
     if (!name.trim()) return setError('Dê um nome para identificar a conta.');
     if (!institution.trim()) return setError('Informe a instituição ou carteira.');
+    let cycle = null;
+    if (isCard && (dueDay || closeOffset)) {
+      cycle = billCycleFromRule(Number(dueDay), Number(closeOffset), toDateInput());
+      if (!cycle) return setError(`Vencimento de 1 a 31 e fechamento de 1 a ${MAX_CLOSE_OFFSET_DAYS} dias antes.`);
+    }
     const draft = {
       name: name.trim(),
       institution: institution.trim(),
@@ -51,8 +62,11 @@ export function AccountForm({ account, canDelete = false, onDelete }: AccountFor
       // Conta importada: o saldo inicial é ajustado pela sincronização (pode ser negativo).
       openingBalanceCents: account?.externalId ? account.openingBalanceCents : amountInputToCents(balanceDigits),
     };
-    if (account) updateAccount(account.id, draft);
-    else addAccount(draft);
+    if (account) {
+      updateAccount(account.id, draft);
+      const changed = cycle && (!rule || rule.dueDay !== Number(dueDay) || rule.closeOffsetDays !== Number(closeOffset));
+      if (cycle && changed) setCardCycle(account.id, cycle);
+    } else addAccount(draft);
     router.back();
   }
 
@@ -93,6 +107,39 @@ export function AccountForm({ account, canDelete = false, onDelete }: AccountFor
             style={[styles.input, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border, fontFamily: fonts.regular }]}
           />
         </View>
+
+        {isCard ? (
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.textMuted, fontFamily: fonts.medium }]}>Fatura do cartão</Text>
+            <View style={styles.cycleRow}>
+              <TextInput
+                accessibilityLabel="Dia do vencimento da fatura"
+                value={dueDay}
+                onChangeText={(value) => setDueDay(value.replace(/\D/g, '').slice(0, 2))}
+                keyboardType="number-pad"
+                placeholder="Vence dia"
+                placeholderTextColor={colors.textMuted}
+                selectionColor={colors.primary}
+                style={[styles.input, styles.cycleInput, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border, fontFamily: fonts.regular }]}
+              />
+              <TextInput
+                accessibilityLabel="Quantos dias antes do vencimento a fatura fecha"
+                value={closeOffset}
+                onChangeText={(value) => setCloseOffset(value.replace(/\D/g, '').slice(0, 2))}
+                keyboardType="number-pad"
+                placeholder="Fecha quantos dias antes"
+                placeholderTextColor={colors.textMuted}
+                selectionColor={colors.primary}
+                style={[styles.input, styles.cycleInput, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border, fontFamily: fonts.regular }]}
+              />
+            </View>
+            <Text style={[styles.hint, { color: colors.textMuted, fontFamily: fonts.regular }]}>
+              {rule
+                ? `Vence dia ${rule.dueDay} e fecha ${rule.closeOffsetDays} dias antes. As compras do dia do fechamento em diante vão para a fatura seguinte.`
+                : 'O banco não informou quando a fatura fecha e vence. Sem isso, cada compra conta no mês em que foi feita. Ex.: Nubank vence dia 5 e fecha 7 dias antes.'}
+            </Text>
+          </View>
+        ) : null}
 
         {account?.externalId ? (
           <Text style={[styles.hint, styles.field, { color: colors.textMuted, fontFamily: fonts.regular }]}>
@@ -209,6 +256,8 @@ const styles = StyleSheet.create({
   balanceTextInput: { flex: 1, minWidth: 0, fontSize: 22, paddingVertical: 10, outlineStyle: 'none' } as never,
   hint: { fontSize: 11, lineHeight: 17, marginTop: 8 },
   iconHint: { marginTop: 0, marginBottom: 9 },
+  cycleRow: { flexDirection: 'row', gap: 10 },
+  cycleInput: { flex: 1 },
   colorOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   colorOption: { width: 44, height: 44, borderRadius: 22, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   selectedColor: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#09090B' },
