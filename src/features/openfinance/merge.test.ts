@@ -259,3 +259,16 @@ describe('logo do banco pelo nome que a pessoa escreveu', () => {
     expect(synced.accounts[0]!.logoFor).toBe('Banco X');
   });
 });
+
+describe('parcelas com o ciclo informado pela pessoa', () => {
+  it('a parcela 2 de uma compra de 28/10 fica na fatura de dezembro, não na de janeiro', () => {
+    const cycle = { closeDate: '2026-10-29', dueDate: '2026-11-05' };
+    const parcel = tx('p2', { date: '2026-11-28', description: 'Loja (2/3)', installment: { number: 2, total: 3, purchaseDate: '2026-10-28' } });
+    const imported = mergeOpenFinance(empty(), snapshot([account('k1', 'credit', 5000, [parcel])]), NOW, ids()).data;
+    expect(byExternal(imported, 'pluggy:p2').installment).toEqual({ number: 2, total: 3, purchaseDate: '2026-10-28' });
+    const fixed = applyCardCycle(imported, imported.accounts[0]!.id, cycle);
+    expect(byExternal(fixed, 'pluggy:p2').billMonth).toBe('2026-12');
+    const again = mergeOpenFinance(fixed, snapshot([account('k1', 'credit', 5000, [parcel])]), NOW, ids()).data;
+    expect(byExternal(again, 'pluggy:p2').billMonth).toBe('2026-12');
+  });
+});

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cardBillMonth,
   accountLogoUrl,
   institutionsNeedingLogo,
   pickConnectorLogo,
@@ -297,5 +298,38 @@ describe('logo do banco pelo nome da instituição', () => {
     expect(accountLogoUrl({ institution: 'Nubank', logoUrl: NUBANK_LOGO, logoFor: 'Nubank' })).toBe(NUBANK_LOGO);
     expect(accountLogoUrl({ institution: 'Inter', logoUrl: NUBANK_LOGO, logoFor: 'Nubank' })).toBeUndefined();
     expect(accountLogoUrl({ institution: 'MeuPluggy', logoUrl: 'https://cdn.pluggy.ai/meupluggy.svg' })).toBeUndefined();
+  });
+});
+
+describe('parcelas na fatura certa (fechamento que muda entre 28 e 29)', () => {
+  // Nubank: vence dia 5 e fecha 7 dias antes → fecha 29/10, 28/11, 29/12.
+  const cycle = { closeDate: '2026-10-29', dueDate: '2026-11-05' };
+
+  it('parcela N vai para a fatura da compra + (N − 1), sem recalcular pela data', () => {
+    // Compra em 28/10 cai na fatura de novembro; a parcela 2 com data 28/11 já passou do fechamento de 28/11,
+    // mas é da fatura de dezembro (e não de janeiro).
+    expect(billMonthFor('2026-11-28', cycle)).toBe('2027-01');
+    expect(cardBillMonth({ date: '2026-11-28', installment: { number: 2, purchaseDate: '2026-10-28' } }, cycle)).toBe('2026-12');
+    expect(cardBillMonth({ date: '2026-12-28', installment: { number: 3, purchaseDate: '2026-10-28' } }, cycle)).toBe('2027-01');
+    // Compra depois do fechamento (30/10) começa em dezembro; a parcela 2 vai para janeiro.
+    expect(cardBillMonth({ date: '2026-11-30', installment: { number: 2, purchaseDate: '2026-10-30' } }, cycle)).toBe('2027-01');
+  });
+
+  it('sem a data da compra, a parcela fica na fatura que fecha no mês dela, mesmo depois do fechamento', () => {
+    expect(cardBillMonth({ date: '2026-11-29', installment: { number: 4 } }, cycle)).toBe('2026-12');
+    expect(cardBillMonth({ date: '2026-11-10', installment: { number: 4 } }, cycle)).toBe('2026-12');
+  });
+
+  it('a importação guarda a data da compra da parcela 1 nas outras e usa na fatura', () => {
+    const base = { externalId: '', description: 'Loja', amountCents: 5000, direction: 'out' as const, status: 'completed' as const, billPayment: false, cardPayment: false };
+    const [first, second] = finalizeCardTransactions(
+      [
+        { ...base, externalId: 'pluggy:p1', date: '2026-10-28', installment: { number: 1, total: 3 } },
+        { ...base, externalId: 'pluggy:p2', date: '2026-10-28', installment: { number: 2, total: 3 } },
+      ],
+      cycle,
+    );
+    expect(first).toMatchObject({ billMonth: '2026-11' });
+    expect(second).toMatchObject({ date: '2026-11-28', billMonth: '2026-12', installment: { number: 2, total: 3, purchaseDate: '2026-10-28' } });
   });
 });

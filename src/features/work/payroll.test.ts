@@ -13,6 +13,7 @@ import {
   holidaysOf,
   minutesToClock,
   monthPayments,
+  pointPeriod,
   nextDayMark,
   sanitizeWorkSettings,
   scheduledWork,
@@ -116,6 +117,35 @@ describe('computeMonthPay', () => {
   });
 });
 
+describe('fechamento do ponto (16 a 15)', () => {
+  const company = (overrides: Partial<WorkSettings> = {}) => settings({ cutoffDay: 15, ...overrides });
+
+  it('o período do ponto vai de 16 do mês anterior a 15 deste (inclusive na virada do ano)', () => {
+    expect(pointPeriod({ cutoffDay: 15 }, '2026-11')).toEqual({ start: '2026-10-16', end: '2026-11-15' });
+    expect(pointPeriod({ cutoffDay: 15 }, '2027-01')).toEqual({ start: '2026-12-16', end: '2027-01-15' });
+    expect(pointPeriod({ cutoffDay: 0 }, '2026-11')).toEqual({ start: '2026-11-01', end: '2026-11-30' });
+  });
+
+  it('feriado até o dia 15 entra no pagamento do mês; o do dia 20 vai para o mês seguinte', () => {
+    // Novembro: 02/11 (Finados) trabalhado; 15/11 cai no domingo de folga; 20/11 fica para dezembro.
+    expect(computeMonthPay(company(), '2026-11')).toMatchObject({ holidaysWorked: 1, holidayExtraCents: 8000, baseCents: 240000, totalCents: 248000 });
+    expect(computeMonthPay(company(), '2026-12')).toMatchObject({ holidaysWorked: 1, baseCents: 248000, totalCents: 256000 });
+  });
+
+  it('falta do dia 18 desconta no mês seguinte; Natal e Ano-Novo entram juntos no pagamento de janeiro', () => {
+    const absent = company({ overrides: { '2026-11-18': 'absence' } });
+    expect(computeMonthPay(absent, '2026-11')).toMatchObject({ absences: 0, absenceCents: 0 });
+    expect(computeMonthPay(absent, '2026-12')).toMatchObject({ absences: 1, absenceCents: 8000 });
+    expect(computeMonthPay(company(), '2027-01')).toMatchObject({ holidaysWorked: 2 });
+  });
+
+  it('o fechamento salvo é lido (0 a 28) e começa em 0 (fim do mês)', () => {
+    expect(sanitizeWorkSettings({ cutoffDay: 15 }, '2026-11-10')?.cutoffDay).toBe(15);
+    expect(sanitizeWorkSettings({ cutoffDay: 31 }, '2026-11-10')?.cutoffDay).toBe(0);
+    expect(defaultWorkSettings('2026-11-10').cutoffDay).toBe(0);
+  });
+});
+
 describe('quinzenas', () => {
   it('domingo ou segunda antecipa para o sábado', () => {
     expect(adjustPayday('2026-11-15')).toBe('2026-11-14');
@@ -123,10 +153,10 @@ describe('quinzenas', () => {
     expect(adjustPayday('2026-12-15')).toBe('2026-12-15');
   });
 
-  it('40% no dia 15 e o resto no último dia', () => {
+  it('dia 15: 40% do salário base; o resto e os feriados acertam no último dia', () => {
     expect(monthPayments(settings(), '2026-11')).toEqual([
-      { id: '2026-11:1', label: 'Salário · 1ª quinzena', date: '2026-11-14', amountCents: 102400 },
-      { id: '2026-11:2', label: 'Salário · 2ª quinzena', date: '2026-11-28', amountCents: 153600 },
+      { id: '2026-11:1', label: 'Salário · 1ª quinzena', date: '2026-11-14', amountCents: 96000 },
+      { id: '2026-11:2', label: 'Salário · 2ª quinzena', date: '2026-11-28', amountCents: 160000 },
     ]);
   });
 

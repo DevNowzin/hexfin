@@ -243,6 +243,28 @@ export function billMonthFor(date: string, cycle: BillCycle): string {
   return monthKeyOf(index);
 }
 
+/** Fatura cujo fechamento cai no mesmo mês do calendário que `date`. */
+function billClosingInMonthOf(date: string, cycle: BillCycle): string {
+  const { dueDay, closeOffsetDays } = cycleRule(cycle);
+  const base = monthIndex(date);
+  for (const index of [base, base + 1, base - 1, base + 2]) {
+    if (closeDateFor(index, dueDay, closeOffsetDays).slice(0, 7) === date.slice(0, 7)) return monthKeyOf(index);
+  }
+  return billMonthFor(date, cycle);
+}
+
+/**
+ * Fatura de uma compra do cartão. Parcela N vai para a fatura da compra + (N − 1) meses, sem recalcular pela
+ * data: como o fechamento muda (dia 28 ou 29), somar meses à data jogaria a parcela uma fatura para frente.
+ * Sem a data da compra, a parcela conta na fatura que fecha no mês dela, mesmo depois do dia do fechamento.
+ */
+export function cardBillMonth(item: { date: string; installment?: { number: number; purchaseDate?: string } }, cycle: BillCycle): string {
+  const installment = item.installment;
+  if (!installment || installment.number < 2) return billMonthFor(installment?.purchaseDate ?? item.date, cycle);
+  if (installment.purchaseDate) return monthKeyOf(monthIndex(billMonthFor(installment.purchaseDate, cycle) + '-01') + installment.number - 1);
+  return billClosingInMonthOf(item.date, cycle);
+}
+
 function installmentGroup(transaction: SnapshotTransaction): string {
   // "LOJA PARC 02/10" e "Loja" são a mesma compra: tira o número da parcela e a palavra "parc(ela)".
   const base = normalizeDescription(transaction.description)
@@ -272,14 +294,15 @@ export function placeInstallments(transactions: SnapshotTransaction[]): Snapshot
     const purchase = installment.purchaseDate ?? firstDates.get(installmentGroup(transaction));
     const sameMonthAsPurchase = purchase !== undefined && purchase.slice(0, 7) === transaction.date.slice(0, 7);
     const date = installment.number > 1 && sameMonthAsPurchase ? addMonths(purchase, installment.number - 1) : transaction.date;
-    return { ...transaction, description, date };
+    // Guarda a data da compra: é ela que decide a fatura de cada parcela.
+    return { ...transaction, description, date, installment: purchase ? { ...installment, purchaseDate: purchase } : installment };
   });
 }
 
 /** Cartão: parcelas no mês delas e cada compra no mês da fatura (quando o banco informa o ciclo). */
 export function finalizeCardTransactions(transactions: SnapshotTransaction[], cycle: BillCycle | undefined): SnapshotTransaction[] {
   const placed = placeInstallments(transactions);
-  return cycle ? placed.map((transaction) => ({ ...transaction, billMonth: billMonthFor(transaction.date, cycle) })) : placed;
+  return cycle ? placed.map((transaction) => ({ ...transaction, billMonth: cardBillMonth(transaction, cycle) })) : placed;
 }
 
 /** Empréstimo: usa `payments.contractOutstandingBalance` (quanto falta para quitar). */

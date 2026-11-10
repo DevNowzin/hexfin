@@ -24,7 +24,9 @@ export interface WorkSettings {
   sickLosesBonus: boolean;
   /** Desconto por atraso (cada atraso). */
   latePenaltyCents: number;
-  /** Quanto cai no dia 15 (o resto cai no último dia do mês). 100 = tudo no fim do mês. */
+  /** Dia em que o ponto fecha (ex.: 15 = de 16 do mês anterior a 15 deste). 0 = fecha no fim do mês. */
+  cutoffDay: number;
+  /** Quanto do salário base cai no dia 15 (o resto e os extras do ponto caem no último dia). 100 = tudo no fim do mês. */
   firstPaymentPercent: number;
   /** Pagamentos (`YYYY-MM:1` ou `YYYY-MM:2`) que o usuário marcou como recebidos antes da data. */
   receivedEarly: string[];
@@ -47,6 +49,7 @@ export function defaultWorkSettings(today: string): WorkSettings {
     attendanceBonusCents: 0,
     sickLosesBonus: false,
     latePenaltyCents: 0,
+    cutoffDay: 0,
     firstPaymentPercent: 40,
     receivedEarly: [],
   };
@@ -172,6 +175,28 @@ export function calendarGrossCents(hourlyRateCents: number, dailyMinutes: number
   return Math.round((hourlyRateCents * dailyMinutes * Math.max(0, periodDays)) / 60);
 }
 
+export const MAX_CUTOFF_DAY = 28;
+
+/** Período do ponto que entra no pagamento do mês: de (fechamento + 1) do mês anterior até o fechamento; sem fechamento, o mês todo. */
+export function pointPeriod(settings: Pick<WorkSettings, 'cutoffDay'>, monthKey: string): { start: string; end: string } {
+  const days = daysOfMonth(monthKey);
+  const cutoff = settings.cutoffDay;
+  if (!Number.isInteger(cutoff) || cutoff < 1 || cutoff > MAX_CUTOFF_DAY) return { start: days[0]!, end: days[days.length - 1]! };
+  const end = `${monthKey}-${String(cutoff).padStart(2, '0')}`;
+  return { start: addDays(`${previousMonthKey(monthKey)}-${String(cutoff).padStart(2, '0')}`, 1), end };
+}
+
+/** Mês anterior (`YYYY-MM`). */
+function previousMonthKey(monthKey: string): string {
+  return addDays(`${monthKey}-01`, -1).slice(0, 7);
+}
+
+function dayRange(start: string, end: string): string[] {
+  const days: string[] = [];
+  for (let day = start; day <= end; day = addDays(day, 1)) days.push(day);
+  return days;
+}
+
 export interface MonthPay {
   /** Dias do mês (28 a 31): base do salário. */
   periodDays: number;
@@ -197,20 +222,26 @@ export interface MonthPay {
 }
 
 /**
- * Previsão do mês pelo calendário: todos os dias do mês (trabalho e folga) pagam a jornada; cada falta tira
- * 1 jornada; feriado trabalhado ganha o adicional. O prêmio de assiduidade entra sem falta nem atraso;
- * atestado paga o dia e só tira o prêmio se a empresa for assim.
+ * Previsão do mês pelo calendário: todos os dias do mês (trabalho e folga) pagam a jornada. O que vem do ponto
+ * (feriado trabalhado, falta, atraso, atestado e assiduidade) segue o período do ponto: com fechamento no dia 15,
+ * o que acontece de 16/10 a 15/11 entra no pagamento de novembro. Cada falta tira 1 jornada; feriado trabalhado
+ * ganha o adicional; atestado paga o dia e só tira o prêmio se a empresa for assim.
  */
 export function computeMonthPay(settings: WorkSettings, monthKey: string): MonthPay {
-  const holidays = holidaysOf(Number(monthKey.slice(0, 4)), settings.holidayChoices);
   const days = daysOfMonth(monthKey);
+  const period = pointPeriod(settings, monthKey);
+  const pointDays = dayRange(period.start, period.end);
+  const holidays = new Map([
+    ...holidaysOf(Number(period.start.slice(0, 4)), settings.holidayChoices),
+    ...holidaysOf(Number(period.end.slice(0, 4)), settings.holidayChoices),
+  ]);
   const dayCents = Math.round((settings.hourlyRateCents * settings.dailyMinutes) / 60);
   const pay: MonthPay = {
     periodDays: days.length, workedDays: 0, paidMinutes: days.length * settings.dailyMinutes, holidaysWorked: 0, absences: 0, lates: 0, sickDays: 0,
     baseCents: calendarGrossCents(settings.hourlyRateCents, settings.dailyMinutes, days.length),
     absenceCents: 0, holidayExtraCents: 0, attendanceBonusCents: 0, attendanceLost: false, penaltiesCents: 0, totalCents: 0,
   };
-  for (const day of days) {
+  for (const day of pointDays) {
     const mark = dayMark(settings, day);
     if (mark === 'off') continue;
     if (mark === 'absence') {
@@ -229,7 +260,7 @@ export function computeMonthPay(settings: WorkSettings, monthKey: string): Month
     }
   }
   // Desconto exato das faltas (mesma conta do bruto, sem somar arredondamentos de cada dia).
-  pay.absenceCents = pay.baseCents - calendarGrossCents(settings.hourlyRateCents, settings.dailyMinutes, days.length - pay.absences);
+  pay.absenceCents = pay.baseCents - calendarGrossCents(settings.hourlyRateCents, settings.dailyMinutes, days.length - Math.min(pay.absences, days.length));
   const lost = pay.absences > 0 || pay.lates > 0 || (settings.sickLosesBonus && pay.sickDays > 0);
   pay.attendanceLost = settings.attendanceBonusCents > 0 && lost;
   pay.attendanceBonusCents = lost ? 0 : settings.attendanceBonusCents;
@@ -255,10 +286,12 @@ export interface Payment {
 
 /** Quinzenas do mês: X% no dia 15 e o resto no último dia (com os descontos), ajustadas pelo `adjustPayday`. */
 export function monthPayments(settings: WorkSettings, monthKey: string): Payment[] {
-  const total = computeMonthPay(settings, monthKey).totalCents;
+  const pay = computeMonthPay(settings, monthKey);
+  const total = pay.totalCents;
   if (total <= 0) return [];
   const percent = Math.min(100, Math.max(0, settings.firstPaymentPercent));
-  const first = Math.round((total * percent) / 100);
+  // Dia 15: parte do salário base. Feriados, faltas, atrasos e assiduidade acertam no último dia.
+  const first = Math.min(total, Math.round((pay.baseCents * percent) / 100));
   const days = daysOfMonth(monthKey);
   const payments: Payment[] = [];
   if (percent < 100 && first > 0) {
@@ -365,6 +398,7 @@ export function sanitizeWorkSettings(value: unknown, today: string): WorkSetting
     attendanceBonusCents: int(raw.attendanceBonusCents ?? raw.absencePenaltyCents, 0, 100_000_00),
     sickLosesBonus: raw.sickLosesBonus === true,
     latePenaltyCents: int(raw.latePenaltyCents, 0, 100_000_00),
+    cutoffDay: int(raw.cutoffDay, 0, MAX_CUTOFF_DAY),
     firstPaymentPercent: int(raw.firstPaymentPercent, base.firstPaymentPercent, 100),
     receivedEarly: Array.isArray(raw.receivedEarly) ? raw.receivedEarly.filter((item): item is string => typeof item === 'string' && /^\d{4}-\d{2}:[12]$/.test(item)) : [],
   };

@@ -24,6 +24,8 @@ import {
   toggleCycleDay,
   clockToMinutes,
   minutesToClock,
+  MAX_CUTOFF_DAY,
+  pointPeriod,
   type DayMark,
   type WorkSettings,
 } from '@/features/work/payroll';
@@ -325,8 +327,13 @@ export default function SalaryScreen() {
               style={inputStyle}
             />
           </View>
-          <View style={styles.fieldHalf} />
+          {percentField('Ponto fecha no dia', settings.cutoffDay, MAX_CUTOFF_DAY, (value) => save({ cutoffDay: value }))}
         </View>
+        <Text style={[styles.hint, { color: colors.textMuted, fontFamily: fonts.regular }]}>
+          {settings.cutoffDay > 0
+            ? `Ponto de ${shortDate(pointPeriod(settings, monthKey).start)} a ${shortDate(pointPeriod(settings, monthKey).end)}: feriados, faltas, atrasos e atestados desse período acertam no último dia do mês. Deixe 0 para fechar no fim do mês.`
+            : 'Ponto fecha no fim do mês. Se a sua empresa fecha no dia 15 (de 16 a 15), escreva 15.'}
+        </Text>
         <View style={styles.fieldRow}>
           {moneyField('Prêmio de assiduidade (R$)', settings.attendanceBonusCents, (cents) => save({ attendanceBonusCents: cents }))}
           {moneyField('Desconto por atraso (R$)', settings.latePenaltyCents, (cents) => save({ latePenaltyCents: cents }))}

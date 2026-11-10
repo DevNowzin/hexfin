@@ -52,6 +52,8 @@ export interface Transaction {
   billPayment?: boolean;
   /** Compra de cartão do Open Finance: mês (`YYYY-MM`) da fatura em que ela vence. Conta nesse mês, não no da data. */
   billMonth?: string;
+  /** Parcela de compra do cartão (Open Finance): decide em que fatura ela entra. */
+  installment?: { number: number; total: number; purchaseDate?: string };
 }
 
 /** Conta fixa (sem fim) ou empréstimo/parcelado (com parcelas que faltam), cadastrados à mão. */
