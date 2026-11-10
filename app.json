@@ -37,6 +37,14 @@
       "expo-font",
       "expo-web-browser",
       "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "O HexFin usa a galeria só para a foto de perfil, que fica no seu aparelho.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
       "./plugins/withReleaseSigning"
     ],
     "experiments": {
