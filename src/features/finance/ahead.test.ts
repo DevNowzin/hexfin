@@ -18,7 +18,7 @@ function tx(id: string, overrides: Partial<Transaction>): Transaction {
 }
 
 function bill(id: string, dueDay: number, overrides: Partial<PlannedBill> = {}): PlannedBill {
-  return { id, description: id, amountCents: 5000, dueDay, categoryId: 'other', kind: 'fixed', startMonth: '2026-01', createdAt: '2026-01-01T00:00:00Z', ...overrides };
+  return { id, description: id, amountCents: 5000, dueDay, categoryId: 'other', kind: 'fixed', startMonth: '2026-11', createdAt: '2026-01-01T00:00:00Z', ...overrides };
 }
 
 function data(transactions: Transaction[], bills: PlannedBill[] = [], accounts: Account[] = [checking]): FinanceData {
@@ -53,9 +53,9 @@ describe('getMonthAhead', () => {
   it('conta fixa e parcela de empréstimo que ainda vencem no mês', () => {
     const ahead = getMonthAhead(data([], [
       bill('luz', 15),
-      bill('aluguel', 5),
+      bill('aluguel', 5, { paidMonths: ['2026-11'] }),
       bill('emprestimo', 28, { kind: 'loan', installments: 24 }),
-      bill('acabou', 20, { kind: 'loan', installments: 2 }),
+      bill('acabou', 20, { kind: 'loan', installments: 2, startMonth: '2026-01' }),
     ]), TODAY);
     expect(ahead.payable.map((item) => [item.id, item.date])).toEqual([
       ['bill:luz', '2026-11-15'],
@@ -73,5 +73,16 @@ describe('getMonthAhead', () => {
     expect(paid.payable).toEqual([]);
     // Depois do vencimento, não é mais "a pagar até o fim do mês".
     expect(getMonthAhead(data(purchases, [], [checking, card]), TODAY).payable).toEqual([]);
+  });
+});
+
+describe('contas vencidas no A pagar', () => {
+  it('vencida sem confirmação segue a pagar como atrasada; paga antes do vencimento sai', () => {
+    const luz = bill('luz', 5, { startMonth: '2026-11' });
+    const net = bill('net', 20, { startMonth: '2026-11', paidMonths: ['2026-11'] });
+    const ahead = getMonthAhead(data([], [luz, net]), TODAY);
+    expect(ahead.payable).toEqual([{ id: 'bill:luz:2026-11', description: 'luz', date: '2026-11-05', amountCents: 5000, kind: 'bill', overdue: true }]);
+    const confirmed = getMonthAhead(data([], [{ ...luz, paidMonths: ['2026-11'] }]), TODAY);
+    expect(confirmed.payable).toEqual([]);
   });
 });

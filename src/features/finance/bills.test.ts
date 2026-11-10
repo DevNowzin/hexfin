@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dueDateIn, firstDueMonth, installmentsFor, nextBillOccurrence, sanitizeBills, validateBillDraft } from './bills';
+import { dueDateIn, firstDueMonth, installmentsFor, nextBillOccurrence, overdueBills, sanitizeBills, setBillMonthPaid, validateBillDraft } from './bills';
 import { detectRecurring } from './recurring';
 import type { PlannedBill, PlannedBillDraft, Transaction } from './types';
 
@@ -93,5 +93,37 @@ describe('detectRecurring com contas previstas', () => {
     expect(detectRecurring([], TODAY, [done]).items).toEqual([]);
     const open = bill({ kind: 'loan', startMonth: '2026-11', dueDay: 20, installments: 2 });
     expect(detectRecurring([], TODAY, [open]).items[0]).toMatchObject({ remaining: 2, nextDate: '2026-11-20' });
+  });
+});
+
+describe('confirmação de pagamento das contas', () => {
+  const luz: PlannedBill = {
+    id: 'luz', description: 'Luz', amountCents: 12000, dueDay: 5, categoryId: 'housing', kind: 'fixed',
+    startMonth: '2026-09', createdAt: '2026-09-01T00:00:00Z',
+  };
+
+  it('vencer não quita: pergunta sobre os vencimentos que passaram (até 2 meses para trás)', () => {
+    expect(overdueBills([luz], '2026-11-10').map((item) => item.date)).toEqual(['2026-09-05', '2026-10-05', '2026-11-05']);
+    expect(overdueBills([luz], '2026-11-05')).toHaveLength(2);
+  });
+
+  it('"Já paguei" tira da lista; "Ainda não" mantém, marcada como atrasada', () => {
+    const paidOct = setBillMonthPaid(setBillMonthPaid(luz, '2026-09', true), '2026-10', true);
+    const notYet = setBillMonthPaid(paidOct, '2026-11', false);
+    expect(overdueBills([notYet], '2026-11-10')).toEqual([{ bill: notYet, monthKey: '2026-11', date: '2026-11-05', acknowledged: true }]);
+    const paidNov = setBillMonthPaid(notYet, '2026-11', true);
+    expect(overdueBills([paidNov], '2026-11-10')).toEqual([]);
+    expect(paidNov.unpaidMonths).toEqual([]);
+  });
+
+  it('empréstimo só pergunta pelas parcelas que existem', () => {
+    const loan: PlannedBill = { ...luz, id: 'emp', kind: 'loan', startMonth: '2026-10', installments: 1 };
+    expect(overdueBills([loan], '2026-11-10').map((item) => item.monthKey)).toEqual(['2026-10']);
+  });
+
+  it('meses salvos inválidos são descartados ao carregar', () => {
+    const [bill] = sanitizeBills([{ ...luz, paidMonths: ['2026-10', 'lixo', 3], unpaidMonths: 'x' }]);
+    expect(bill!.paidMonths).toEqual(['2026-10']);
+    expect(bill!.unpaidMonths).toBeUndefined();
   });
 });

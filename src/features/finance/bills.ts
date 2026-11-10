@@ -64,21 +64,83 @@ export function validateBillDraft(draft: PlannedBillDraft): string | null {
   return null;
 }
 
-/** Dados antigos ou corrompidos: fica só o que tem a forma de uma conta prevista. */
+function monthList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.filter((item): item is string => typeof item === 'string' && /^\d{4}-\d{2}$/.test(item));
+}
+
+/** Dados antigos ou corrompidos: fica só o que tem a forma de uma conta prevista (e meses válidos). */
 export function sanitizeBills(value: unknown): PlannedBill[] {
   if (!Array.isArray(value)) return [];
-  return value.filter((item): item is PlannedBill => {
-    if (!item || typeof item !== 'object') return false;
-    const bill = item as Partial<PlannedBill>;
-    return (
-      typeof bill.id === 'string' &&
-      typeof bill.description === 'string' &&
-      Number.isInteger(bill.amountCents) &&
-      Number.isInteger(bill.dueDay) &&
-      typeof bill.categoryId === 'string' &&
-      (bill.kind === 'fixed' || bill.kind === 'loan') &&
-      typeof bill.startMonth === 'string' &&
-      /^\d{4}-\d{2}$/.test(bill.startMonth)
-    );
+  return value.filter(isBillShape).map((bill) => {
+    const { paidMonths, unpaidMonths, ...rest } = bill;
+    const paid = monthList(paidMonths);
+    const unpaid = monthList(unpaidMonths);
+    return { ...rest, ...(paid ? { paidMonths: paid } : {}), ...(unpaid ? { unpaidMonths: unpaid } : {}) };
   });
+}
+
+function isBillShape(item: unknown): item is PlannedBill {
+  if (!item || typeof item !== 'object') return false;
+  const bill = item as Partial<PlannedBill>;
+  return (
+    typeof bill.id === 'string' &&
+    typeof bill.description === 'string' &&
+    Number.isInteger(bill.amountCents) &&
+    Number.isInteger(bill.dueDay) &&
+    typeof bill.categoryId === 'string' &&
+    (bill.kind === 'fixed' || bill.kind === 'loan') &&
+    typeof bill.startMonth === 'string' &&
+    /^\d{4}-\d{2}$/.test(bill.startMonth)
+  );
+}
+
+/** Vencimentos entre dois dias (inclusive), a partir de `startMonth` e dentro das parcelas do empréstimo. */
+export function billDueDatesBetween(bill: PlannedBill, from: string, to: string): Array<{ monthKey: string; date: string }> {
+  const start = monthIndex(bill.startMonth);
+  const result: Array<{ monthKey: string; date: string }> = [];
+  for (let index = Math.max(start, monthIndex(from.slice(0, 7))); index <= monthIndex(to.slice(0, 7)); index += 1) {
+    if (bill.kind === 'loan' && index - start >= (bill.installments ?? 0)) break;
+    const monthKey = monthKeyOf(index);
+    const date = dueDateIn(monthKey, bill.dueDay);
+    if (date >= from && date <= to) result.push({ monthKey, date });
+  }
+  return result;
+}
+
+export function isBillMonthPaid(bill: PlannedBill, monthKey: string): boolean {
+  return bill.paidMonths?.includes(monthKey) ?? false;
+}
+
+export interface OverdueBill {
+  bill: PlannedBill;
+  monthKey: string;
+  date: string;
+  /** O usuário já respondeu "Ainda não": segue atrasada até confirmar. */
+  acknowledged: boolean;
+}
+
+/** Quantos meses para trás o app ainda pergunta se uma conta foi paga. */
+export const OVERDUE_LOOKBACK_MONTHS = 2;
+
+/** Contas que já venceram (antes de hoje) e ainda não foram confirmadas como pagas, da mais antiga à mais nova. */
+export function overdueBills(bills: PlannedBill[], today: string): OverdueBill[] {
+  const from = `${monthKeyOf(monthIndex(today.slice(0, 7)) - OVERDUE_LOOKBACK_MONTHS)}-01`;
+  const yesterday = new Date(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 1, Number(today.slice(8, 10)) - 1, 12);
+  const to = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
+  return bills
+    .flatMap((bill) =>
+      billDueDatesBetween(bill, from, to)
+        .filter(({ monthKey }) => !isBillMonthPaid(bill, monthKey))
+        .map(({ monthKey, date }) => ({ bill, monthKey, date, acknowledged: bill.unpaidMonths?.includes(monthKey) ?? false })),
+    )
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** "Já paguei" ou "Ainda não" para o vencimento de um mês. */
+export function setBillMonthPaid(bill: PlannedBill, monthKey: string, paid: boolean): PlannedBill {
+  const without = (list: string[] | undefined) => (list ?? []).filter((item) => item !== monthKey);
+  const paidMonths = paid ? [...without(bill.paidMonths), monthKey].sort() : without(bill.paidMonths);
+  const unpaidMonths = paid ? without(bill.unpaidMonths) : [...without(bill.unpaidMonths), monthKey].sort();
+  return { ...bill, paidMonths, unpaidMonths };
 }

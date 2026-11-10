@@ -13,6 +13,7 @@ import { Screen } from '@/components/Screen';
 import { SectionHeader } from '@/components/SectionHeader';
 import { TransactionItem } from '@/components/TransactionItem';
 import { getMonthAhead } from '@/features/finance/ahead';
+import { BillConfirmations } from '@/features/finance/BillConfirmations';
 import { visibleInsights } from '@/features/finance/assistants';
 import { useFinance } from '@/features/finance/FinanceContext';
 import {
@@ -224,6 +225,8 @@ export default function HomeScreen() {
               </Card>
             </View>
           ) : null}
+
+          <BillConfirmations />
 
           {insights.length > 0 ? (
             <View style={styles.section}>

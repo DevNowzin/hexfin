@@ -68,9 +68,13 @@ export interface PlannedBill {
   /** Empréstimo: quantas parcelas a partir de `startMonth`. */
   installments?: number;
   createdAt: string;
+  /** Meses (`YYYY-MM`) que o usuário confirmou como pagos. Vencer não quita sozinho. */
+  paidMonths?: string[];
+  /** Meses vencidos em que o usuário disse "Ainda não": seguem a pagar, marcados como atrasados. */
+  unpaidMonths?: string[];
 }
 
-export type PlannedBillDraft = Omit<PlannedBill, 'id' | 'createdAt'>;
+export type PlannedBillDraft = Omit<PlannedBill, 'id' | 'createdAt' | 'paidMonths' | 'unpaidMonths'>;
 
 export interface Category {
   id: string;

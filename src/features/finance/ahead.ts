@@ -1,6 +1,6 @@
 // O que ainda vai entrar e sair de hoje até o fim do mês (função pura, testada). É o resumo do Início.
 import { billStatusFor } from '@/features/openfinance/normalize';
-import { nextBillOccurrence } from './bills';
+import { isBillMonthPaid, nextBillOccurrence, overdueBills } from './bills';
 import { getCardBill, isCardAccount, scopeOf } from './scope';
 import type { Account, FinanceData, Transaction } from './types';
 
@@ -10,6 +10,8 @@ export interface AheadItem {
   date: string;
   amountCents: number;
   kind: 'transaction' | 'bill' | 'card';
+  /** Conta que venceu sem confirmação de pagamento. */
+  overdue?: boolean;
 }
 
 export interface MonthAhead {
@@ -62,8 +64,12 @@ export function getMonthAhead(data: FinanceData, today: string): MonthAhead {
 
   for (const bill of data.bills ?? []) {
     const occurrence = nextBillOccurrence(bill, today);
-    if (!occurrence || occurrence.date > until) continue;
+    if (!occurrence || occurrence.date > until || isBillMonthPaid(bill, occurrence.date.slice(0, 7))) continue;
     payable.push({ id: `bill:${bill.id}`, description: bill.description, date: occurrence.date, amountCents: bill.amountCents, kind: 'bill' });
+  }
+  // Vencer não quita: o que venceu sem "Já paguei" segue a pagar, como atrasado.
+  for (const { bill, monthKey, date } of overdueBills(data.bills ?? [], today)) {
+    payable.push({ id: `bill:${bill.id}:${monthKey}`, description: bill.description, date, amountCents: bill.amountCents, kind: 'bill', overdue: true });
   }
 
   payable.push(...cardBillsAhead(data, today, until));
