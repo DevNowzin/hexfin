@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   addDays,
+  billDatesFor,
+  billStatusFor,
   billMonthFor,
   finalizeCardTransactions,
   normalizeAccount,
@@ -153,6 +155,38 @@ describe('fatura do cartão', () => {
     const cycle = { closeDate: '2026-11-28', dueDate: '2026-12-05' };
     expect(billMonthFor('2026-11-10', cycle)).toBe('2026-12');
     expect(billMonthFor('2026-11-28', cycle)).toBe('2027-01');
+  });
+
+  it('fechamento acompanha o vencimento: Nubank fecha dia 29 em outubro e dia 28 em setembro', () => {
+    // Fatura aberta informada em novembro: fecha 28/11 e vence 05/12 (7 dias).
+    const cycle = { closeDate: '2026-11-28', dueDate: '2026-12-05' };
+    expect(billMonthFor('2026-10-28', cycle)).toBe('2026-11');
+    expect(billMonthFor('2026-10-29', cycle)).toBe('2026-12');
+    expect(billMonthFor('2026-09-27', cycle)).toBe('2026-10');
+    expect(billMonthFor('2026-09-28', cycle)).toBe('2026-11');
+    expect(billMonthFor('2027-02-25', cycle)).toBe('2027-03');
+    expect(billMonthFor('2027-02-26', cycle)).toBe('2027-04');
+  });
+
+  it('datas de cada fatura: fecha 7 dias antes do dia 5 e vencimento no fim de semana vai para segunda', () => {
+    const cycle = { closeDate: '2026-11-28', dueDate: '2026-12-05' };
+    expect(billDatesFor('2026-11', cycle)).toEqual({ closeDate: '2026-10-29', dueDate: '2026-11-05' });
+    // 05/12/2026 é sábado: paga na segunda 07/12.
+    expect(billDatesFor('2026-12', cycle)).toEqual({ closeDate: '2026-11-28', dueDate: '2026-12-07' });
+  });
+
+  it('fatura fechada a pagar e fatura aberta', () => {
+    const cycle = { closeDate: '2026-11-28', dueDate: '2026-12-05' };
+    expect(billStatusFor('2026-11', cycle, '2026-11-10')).toMatchObject({ closed: true, dueDate: '2026-11-05' });
+    expect(billStatusFor('2026-12', cycle, '2026-11-10')).toMatchObject({ closed: false, closeDate: '2026-11-28' });
+    expect(billStatusFor('2026-12', cycle, '2026-11-28').closed).toBe(true);
+  });
+
+  it('banco com dia fixo de fechamento continua no mesmo dia todo mês', () => {
+    const cycle = { closeDate: '2026-11-10', dueDate: '2026-11-20' };
+    expect(billMonthFor('2026-10-09', cycle)).toBe('2026-10');
+    expect(billMonthFor('2026-10-10', cycle)).toBe('2026-11');
+    expect(billMonthFor('2027-02-10', cycle)).toBe('2027-03');
   });
 });
 

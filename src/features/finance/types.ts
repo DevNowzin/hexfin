@@ -21,6 +21,8 @@ export interface Account {
   openingBalanceCents: number;
   /** Id de origem quando a conta veio do Open Finance (ex.: `pluggy:<id>`). Saldo e tipo vêm do banco. */
   externalId?: string;
+  /** Cartão do Open Finance: fechamento e vencimento da fatura aberta (`YYYY-MM-DD`), base do ciclo de cada mês. */
+  billCycle?: { closeDate: string; dueDate: string };
 }
 
 export interface Transaction {

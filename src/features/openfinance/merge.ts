@@ -13,7 +13,7 @@
 import { localCategorize } from '@/features/ai/categorize';
 import { getAccountBalance } from '@/features/finance/selectors';
 import type { Account, AccountType, FinanceData, Transaction } from '@/features/finance/types';
-import type { ImportReport, OpenFinanceSnapshot, SnapshotTransaction } from './types';
+import type { BillCycle, ImportReport, OpenFinanceSnapshot, SnapshotTransaction } from './types';
 
 const IMPORTED_COLORS: Record<AccountType, string> = {
   checking: '#8B7CFF',
@@ -29,6 +29,7 @@ interface Target {
   type: AccountType;
   name: string;
   institution: string;
+  billCycle?: BillCycle;
 }
 
 export type IdFactory = (prefix: string) => string;
@@ -37,7 +38,7 @@ function upsertAccount(accounts: Account[], target: Target, createId: IdFactory,
   const index = accounts.findIndex((account) => account.externalId === target.externalId);
   const existing = accounts[index];
   if (existing) {
-    const updated = { ...existing, type: target.type };
+    const updated = { ...existing, type: target.type, ...(target.billCycle ? { billCycle: target.billCycle } : {}) };
     accounts[index] = updated;
     report.accountsUpdated += 1;
     return updated;
@@ -50,6 +51,7 @@ function upsertAccount(accounts: Account[], target: Target, createId: IdFactory,
     color: IMPORTED_COLORS[target.type],
     openingBalanceCents: 0,
     externalId: target.externalId,
+    ...(target.billCycle ? { billCycle: target.billCycle } : {}),
   };
   accounts.push(created);
   report.accountsAdded += 1;
@@ -136,6 +138,7 @@ export function mergeOpenFinance(
         type: source.kind,
         name: source.name,
         institution: source.institution,
+        billCycle: source.billCycle,
       },
       createId,
       report,

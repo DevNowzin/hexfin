@@ -198,3 +198,13 @@ describe('importedStatus', () => {
     expect(getTotalBalance(data.accounts, data.transactions, today)).toBe(9000);
   });
 });
+
+describe('ciclo da fatura na conta do cartão', () => {
+  it('guarda o fechamento e o vencimento que o banco informou e atualiza na próxima sincronização', () => {
+    const card = (closeDate: string, dueDate: string) => ({ ...account('k1', 'credit', 50000, []), billCycle: { closeDate, dueDate } });
+    const first = mergeOpenFinance(empty(), snapshot([card('2026-11-28', '2026-12-05')]), NOW, ids()).data;
+    expect(first.accounts[0]!.billCycle).toEqual({ closeDate: '2026-11-28', dueDate: '2026-12-05' });
+    const next = mergeOpenFinance(first, snapshot([card('2026-12-29', '2027-01-05')]), NOW, ids()).data;
+    expect(next.accounts[0]!.billCycle).toEqual({ closeDate: '2026-12-29', dueDate: '2027-01-05' });
+  });
+});

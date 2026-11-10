@@ -19,8 +19,13 @@ import {
   groupTransactionsByDate,
 } from '@/features/finance/selectors';
 import { getAccountStatement, getCardBill, hasCardAccounts, type MoneyScope } from '@/features/finance/scope';
+import { billStatusFor } from '@/features/openfinance/normalize';
 import { useAppTheme } from '@/theme/AppTheme';
-import { formatMonth, relativeDayLabel } from '@/utils/format';
+import { formatMonth, parseLocalDate, relativeDayLabel, toDateInput } from '@/utils/format';
+
+function shortDate(value: string): string {
+  return parseLocalDate(value).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+}
 
 const filters: Array<{ id: ActivityFilter; label: string }> = [
   { id: 'all', label: 'Todas' },
@@ -51,6 +56,9 @@ export default function TransactionsScreen() {
   const bill = getCardBill(transactions, accounts, monthKey);
   const hasAny = transactions.length > 0;
   const monthName = formatMonth(monthKey, false).toLocaleLowerCase('pt-BR');
+  // Com um só cartão com ciclo informado, diz se a fatura do mês já fechou (a pagar) ou ainda está aberta.
+  const cycles = accounts.flatMap((account) => (account.type === 'credit' && account.billCycle ? [account.billCycle] : []));
+  const billStatus = cycles.length === 1 ? billStatusFor(monthKey, cycles[0]!, toDateInput()) : null;
 
   return (
     <Screen>
@@ -108,12 +116,20 @@ export default function TransactionsScreen() {
           })}
         </View>
 
-        <MonthSelector monthKey={monthKey} onChange={setMonthKey} />
+        {/* No cartão dá para ver a fatura aberta e as próximas (parcelas), que vencem em meses futuros. */}
+        <MonthSelector monthKey={monthKey} onChange={setMonthKey} allowFuture={scope === 'card'} />
 
         {hasAny && scope === 'card' ? (
           <Card style={styles.billCard}>
             <Text style={[styles.summaryLabel, { color: colors.textMuted, fontFamily: fonts.regular }]}>Fatura de {monthName}</Text>
             <AmountText cents={bill.totalCents} style={styles.billTotal} />
+            {billStatus ? (
+              <Text style={[styles.billMeta, { color: colors.text, fontFamily: fonts.medium }]}>
+                {billStatus.closed
+                  ? `Fechada em ${shortDate(billStatus.closeDate)} · vence ${shortDate(billStatus.dueDate)}`
+                  : `Aberta · fecha ${shortDate(billStatus.closeDate)} · vence ${shortDate(billStatus.dueDate)}`}
+              </Text>
+            ) : null}
             <Text style={[styles.billMeta, { color: colors.textMuted, fontFamily: fonts.regular }]}>
               {bill.count} {bill.count === 1 ? 'lançamento' : 'lançamentos'}
               {bill.creditsCents > 0 ? ' · estornos já descontados' : ''}

@@ -171,16 +171,58 @@ function monthKeyOf(index: number): string {
   return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, '0')}`;
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Fechamento da fatura que vence no mês `index`: o dia do vencimento menos a mesma distância da fatura aberta. */
+function closeDateFor(index: number, dueDay: number, closeOffsetDays: number): string {
+  const year = Math.floor(index / 12);
+  const month = index % 12;
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const due = new Date(year, month, Math.min(dueDay, lastDay), 12);
+  return toDateInput(new Date(due.getTime() - closeOffsetDays * DAY_MS));
+}
+
 /**
- * Mês da fatura em que uma compra vence. Compra antes do dia de fechamento entra na fatura que fecha
- * naquele mês; no dia do fechamento ou depois, na do mês seguinte. O vencimento vem alguns dias depois
- * do fechamento, às vezes já no outro mês: essa distância vem da fatura aberta que o banco informou.
+ * Mês da fatura em que uma compra vence: a primeira fatura que fecha depois da compra. A compra do
+ * dia do fechamento já vai para a seguinte. O fechamento acompanha o vencimento (ex.: Nubank fecha
+ * 7 dias antes do dia 5, então dia 29 em mês de 31 dias e dia 28 em mês de 30), por isso não é um
+ * dia fixo do mês: dia do vencimento e distância vêm da fatura aberta que o banco informou.
  */
+function cycleRule(cycle: BillCycle): { dueDay: number; closeOffsetDays: number } {
+  return {
+    dueDay: Number(cycle.dueDate.slice(8, 10)),
+    closeOffsetDays: Math.round((parseLocalDate(cycle.dueDate).getTime() - parseLocalDate(cycle.closeDate).getTime()) / DAY_MS),
+  };
+}
+
+/** Próximo dia útil (sábado e domingo vão para segunda). */
+function nextWeekday(date: Date): Date {
+  const shift = date.getDay() === 6 ? 2 : date.getDay() === 0 ? 1 : 0;
+  return new Date(date.getTime() + shift * DAY_MS);
+}
+
+/** Fechamento e vencimento da fatura que vence no mês `monthKey` (`YYYY-MM`). Vencimento no fim de semana passa para segunda. */
+export function billDatesFor(monthKey: string, cycle: BillCycle): { closeDate: string; dueDate: string } {
+  const { dueDay, closeOffsetDays } = cycleRule(cycle);
+  const index = monthIndex(`${monthKey}-01`);
+  const year = Math.floor(index / 12);
+  const month = index % 12;
+  const due = new Date(year, month, Math.min(dueDay, new Date(year, month + 1, 0).getDate()), 12);
+  return { closeDate: closeDateFor(index, dueDay, closeOffsetDays), dueDate: toDateInput(nextWeekday(due)) };
+}
+
+/** A fatura do mês já fechou (a pagar) ou ainda recebe compras? A compra do dia do fechamento já é da seguinte. */
+export function billStatusFor(monthKey: string, cycle: BillCycle, today: string): { closed: boolean; closeDate: string; dueDate: string } {
+  const dates = billDatesFor(monthKey, cycle);
+  return { closed: today >= dates.closeDate, ...dates };
+}
+
 export function billMonthFor(date: string, cycle: BillCycle): string {
-  const closeDay = Number(cycle.closeDate.slice(8, 10));
-  const day = Number(date.slice(8, 10));
-  const closeMonth = monthIndex(date) + (day < closeDay ? 0 : 1);
-  return monthKeyOf(closeMonth + monthIndex(cycle.dueDate) - monthIndex(cycle.closeDate));
+  const { dueDay, closeOffsetDays } = cycleRule(cycle);
+  let index = monthIndex(date);
+  while (date < closeDateFor(index - 1, dueDay, closeOffsetDays)) index -= 1;
+  while (date >= closeDateFor(index, dueDay, closeOffsetDays)) index += 1;
+  return monthKeyOf(index);
 }
 
 function installmentGroup(transaction: SnapshotTransaction): string {
