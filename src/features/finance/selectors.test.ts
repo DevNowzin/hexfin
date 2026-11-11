@@ -7,6 +7,7 @@ import {
   findDuplicateCharges,
   getAccountBalance,
   getCashFlow,
+  getDayOutflowCents,
   getMonthSummary,
   getSpendingByCategory,
   getTotalBalance,
@@ -330,5 +331,24 @@ describe('datas futuras e mês da fatura', () => {
     const options = { monthKey: '2026-11', today: '2026-11-10' };
     expect(filterActivities([future, past], { ...options, filter: 'pending' }).map((item) => item.id)).toEqual(['future']);
     expect(filterActivities([future, past], { ...options, filter: 'expense' }).map((item) => item.id)).toEqual(['past']);
+  });
+});
+
+describe('getDayOutflowCents', () => {
+  it('soma só as saídas do dia, sem transferência nem pagamento de fatura', () => {
+    expect(
+      getDayOutflowCents([
+        transaction({ id: 'a', amountCents: 2345 }),
+        transaction({ id: 'b', amountCents: 1000, type: 'income' }),
+        transaction({ id: 'c', amountCents: 5000, transferAccountId: 'poupanca' }),
+        transaction({ id: 'd', amountCents: 9900, billPayment: true }),
+        transaction({ id: 'e', amountCents: 55, status: 'pending' }),
+      ]),
+    ).toBe(2400);
+  });
+
+  it('dia sem saídas dá zero', () => {
+    expect(getDayOutflowCents([transaction({ type: 'income' })])).toBe(0);
+    expect(getDayOutflowCents([])).toBe(0);
   });
 });

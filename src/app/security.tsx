@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Toggle } from '@/components/Toggle';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Screen } from '@/components/Screen';
@@ -74,12 +75,10 @@ export default function SecurityScreen() {
               <Text style={[styles.rowTitle, { color: colors.text, fontFamily: fonts.medium }]}>Bloqueio com PIN</Text>
               <Text style={[styles.rowDescription, { color: colors.textMuted, fontFamily: fonts.regular }]}>Pede o PIN ao abrir o app</Text>
             </View>
-            <Switch
+            <Toggle
               accessibilityLabel="Bloqueio com PIN"
               value={prefs.pinEnabled}
               onValueChange={(on) => setFlow(on ? 'enable' : 'disable')}
-              trackColor={{ false: colors.surfaceElevated, true: colors.primary }}
-              thumbColor={colors.primaryText}
             />
           </View>
           {prefs.pinEnabled ? (

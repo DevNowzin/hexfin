@@ -16,6 +16,7 @@ import {
   type ActivityFilter,
   filterActivities,
   getCurrentMonthKey,
+  getDayOutflowCents,
   groupTransactionsByDate,
 } from '@/features/finance/selectors';
 import { getAccountStatement, getCardBill, hasCardAccounts, type MoneyScope } from '@/features/finance/scope';
@@ -201,7 +202,12 @@ export default function TransactionsScreen() {
         ) : (
           groups.map(([date, items]) => (
             <View key={date} style={styles.group}>
-              <Text style={[styles.groupTitle, { color: colors.textMuted, fontFamily: fonts.medium }]}>{relativeDayLabel(date)}</Text>
+              <View style={styles.groupHeader}>
+                <Text numberOfLines={1} style={[styles.groupTitle, { color: colors.textMuted, fontFamily: fonts.medium }]}>{relativeDayLabel(date)}</Text>
+                {getDayOutflowCents(items) > 0 ? (
+                  <AmountText cents={-getDayOutflowCents(items)} showSign color={colors.textMuted} style={styles.groupTotal} />
+                ) : null}
+              </View>
               <Card style={styles.groupCard}>
                 {items.map((transaction, index) => (
                   <TransactionItem key={transaction.id} transaction={transaction} bordered={index < items.length - 1} />
@@ -236,6 +242,8 @@ const styles = StyleSheet.create({
   firstEmpty: { marginTop: 14 },
   resultCount: { fontSize: 12 },
   group: { marginTop: 18 },
-  groupTitle: { fontSize: 12, marginBottom: 9, marginLeft: 2 },
+  groupHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 9, marginHorizontal: 2 },
+  groupTitle: { fontSize: 12, flexShrink: 1 },
+  groupTotal: { fontSize: 12 },
   groupCard: { paddingTop: 6, paddingBottom: 6 },
 });

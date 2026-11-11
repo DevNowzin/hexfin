@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Toggle } from '@/components/Toggle';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Screen } from '@/components/Screen';
@@ -161,24 +162,20 @@ export default function AiSettingsScreen() {
               <Text style={[styles.consent, { color: colors.text, fontFamily: fonts.regular }]}>
                 Autorizo enviar a descrição das transações {draft.mode === 'direct' ? 'para a Anthropic' : 'para o meu servidor'} para receber sugestões.
               </Text>
-              <Switch
+              <Toggle
                 accessibilityLabel="Autorizar envio da descrição"
                 value={Boolean(draft.consentedAt)}
                 onValueChange={(on) => update({ consentedAt: on ? new Date().toISOString() : undefined })}
-                trackColor={{ false: colors.surfaceElevated, true: colors.primary }}
-                thumbColor={draft.consentedAt ? colors.primaryText : colors.textMuted}
               />
             </View>
             <View style={[styles.row, styles.consentDivider, { borderTopColor: colors.border }]}>
               <Text style={[styles.consent, { color: colors.text, fontFamily: fonts.regular }]}>
                 Autorizo enviar percentuais do mês (economia, variação e fatia de cada categoria) para a IA comentar na aba Assistentes. Valores em reais não saem.
               </Text>
-              <Switch
+              <Toggle
                 accessibilityLabel="Autorizar comentários do mês"
                 value={Boolean(draft.insightsConsentedAt)}
                 onValueChange={(on) => update({ insightsConsentedAt: on ? new Date().toISOString() : undefined })}
-                trackColor={{ false: colors.surfaceElevated, true: colors.primary }}
-                thumbColor={draft.insightsConsentedAt ? colors.primaryText : colors.textMuted}
               />
             </View>
           </Card>

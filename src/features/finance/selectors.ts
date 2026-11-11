@@ -139,6 +139,13 @@ export function groupTransactionsByDate(transactions: Transaction[]): Array<[str
   return [...groups.entries()];
 }
 
+/** Total de saídas de um dia da lista (cabeçalho do dia em Atividades). Transferência e pagamento de fatura não são gasto. */
+export function getDayOutflowCents(transactions: Transaction[]): number {
+  return transactions
+    .filter((transaction) => transaction.type === 'expense' && !transaction.transferAccountId && countsAsFlow(transaction))
+    .reduce((total, transaction) => total + transaction.amountCents, 0);
+}
+
 export interface EstablishmentTotal {
   description: string;
   totalCents: number;

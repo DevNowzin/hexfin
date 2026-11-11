@@ -221,14 +221,14 @@ export default function HomeScreen() {
               <Pressable accessibilityRole="button" accessibilityLabel="Ver o que vou receber" onPress={() => router.push('/ahead?side=receivable')} style={styles.summaryPress}>
                 <Card style={styles.summaryCard}>
                   <Text style={[styles.summaryLabel, { color: colors.textMuted, fontFamily: fonts.regular }]}>A receber até {untilLabel}</Text>
-                  <AmountText cents={ahead.receivableCents} color={colors.income} style={styles.summaryValue} />
+                  <AmountText cents={ahead.receivableCents} color={ahead.receivable.length > 0 ? colors.income : colors.textMuted} style={styles.summaryValue} />
                   <Text style={[styles.summaryLabel, { color: colors.textMuted, fontFamily: fonts.regular }]}>{countLabel(ahead.receivable.length)}</Text>
                 </Card>
               </Pressable>
               <Pressable accessibilityRole="button" accessibilityLabel="Ver o que vou pagar" onPress={() => router.push('/ahead?side=payable')} style={styles.summaryPress}>
                 <Card style={styles.summaryCard}>
                   <Text style={[styles.summaryLabel, { color: colors.textMuted, fontFamily: fonts.regular }]}>A pagar</Text>
-                  <AmountText cents={ahead.payableCents} color={colors.expense} style={styles.summaryValue} />
+                  <AmountText cents={ahead.payableCents} color={ahead.payable.length > 0 ? colors.expense : colors.textMuted} style={styles.summaryValue} />
                   <Text style={[styles.summaryLabel, { color: colors.textMuted, fontFamily: fonts.regular }]}>{countLabel(ahead.payable.length)}</Text>
                 </Card>
               </Pressable>

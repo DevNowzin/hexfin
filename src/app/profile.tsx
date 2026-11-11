@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Toggle } from '@/components/Toggle';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { ListRow } from '@/components/ListRow';
@@ -146,12 +147,10 @@ export default function ProfileScreen() {
               subtitle="Esconde os valores em todas as telas"
               bordered
               right={
-                <Switch
+                <Toggle
                   accessibilityLabel="Ocultar valores"
                   value={profile.hideBalances}
                   onValueChange={toggleBalances}
-                  trackColor={{ false: colors.surfaceElevated, true: colors.primary }}
-                  thumbColor={profile.hideBalances ? colors.primaryText : colors.textMuted}
                 />
               }
             />
@@ -189,12 +188,10 @@ export default function ProfileScreen() {
                   subtitle={assistant.watches}
                   bordered={index < ASSISTANTS.length - 1}
                   right={
-                    <Switch
+                    <Toggle
                       accessibilityLabel={`${enabled ? 'Desligar' : 'Ligar'} ${assistant.name}`}
                       value={enabled}
                       onValueChange={() => updateProfile({ disabledAssistants: toggleAssistant(profile.disabledAssistants, assistant.id) })}
-                      trackColor={{ false: colors.surfaceElevated, true: colors.primary }}
-                      thumbColor={enabled ? colors.primaryText : colors.textMuted}
                     />
                   }
                 />

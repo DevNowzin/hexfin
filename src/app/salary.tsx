@@ -1,12 +1,13 @@
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useRef, useState } from 'react';
+import { Pressable, ScrollView, type ScrollViewInstance, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Toggle } from '@/components/Toggle';
 import { AmountText } from '@/components/AmountText';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { MonthSelector } from '@/components/MonthSelector';
 import { Screen } from '@/components/Screen';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { SectionHeader } from '@/components/SectionHeader';
 import { useFinance } from '@/features/finance/FinanceContext';
 import { getCurrentMonthKey } from '@/features/finance/selectors';
 import {
@@ -45,6 +46,31 @@ function minutesToHours(minutes: number): string {
   return Number.isInteger(hours) ? String(hours) : hours.toFixed(2).replace('.', ',').replace(/0$/, '');
 }
 
+interface FoldHeaderProps {
+  title: string;
+  summary?: string;
+  open: boolean;
+  onToggle: () => void;
+}
+
+/** Título de seção que abre e fecha, com um resumo do que está dentro. */
+function FoldHeader({ title, summary, open, onToggle }: FoldHeaderProps) {
+  const { colors, fonts } = useAppTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${open ? 'Fechar' : 'Abrir'} ${title}`}
+      accessibilityState={{ expanded: open }}
+      onPress={onToggle}
+      style={({ pressed }) => [styles.fold, { opacity: pressed ? 0.7 : 1 }]}
+    >
+      <Text style={[styles.foldTitle, { color: colors.text, fontFamily: fonts.semiBold }]}>{title}</Text>
+      {summary ? <Text numberOfLines={1} style={[styles.foldSummary, { color: colors.textMuted, fontFamily: fonts.regular }]}>{summary}</Text> : null}
+      <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
+    </Pressable>
+  );
+}
+
 export default function SalaryScreen() {
   const { work, saveWork } = useFinance();
   const { colors, fonts } = useAppTheme();
@@ -58,6 +84,12 @@ export default function SalaryScreen() {
   const [offDaysText, setOffDaysText] = useState(String(pattern?.[1] ?? 1));
   // Depois de "Aplicar", o próximo toque no calendário marca o 1º dia de trabalho do ciclo.
   const [pickingStart, setPickingStart] = useState(false);
+  const hasRate = settings.hourlyRateCents > 0;
+  // Seções recolhíveis: sem valor da hora, só Valores começa aberta.
+  const [open, setOpen] = useState({ calendar: hasRate, values: !hasRate, holidays: false });
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  const valuesY = useRef(0);
+  const toggleSection = (key: keyof typeof open) => setOpen((current) => ({ ...current, [key]: !current[key] }));
 
   const save = (patch: Partial<WorkSettings>) => saveWork({ ...settings, ...patch });
   const pay = computeMonthPay(settings, monthKey);
@@ -145,9 +177,26 @@ export default function SalaryScreen() {
   return (
     <Screen>
       <ScreenHeader title="Salário por hora" subtitle="Previsão pela sua escala" showBack />
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <MonthSelector monthKey={monthKey} onChange={setMonthKey} allowFuture />
 
+        {!hasRate ? (
+          <Card style={styles.summary}>
+            <Text style={[styles.promptTitle, { color: colors.text, fontFamily: fonts.semiBold }]}>Informe o valor da hora</Text>
+            <Text style={[styles.meta, { color: colors.textMuted, fontFamily: fonts.regular }]}>
+              Com o valor da hora e a sua escala, o HexFin prevê quanto cai no dia 15 e no fim do mês.
+            </Text>
+            <Button
+              label="Informar valor da hora"
+              icon="create-outline"
+              onPress={() => {
+                setOpen((current) => ({ ...current, values: true }));
+                scrollRef.current?.scrollTo({ y: valuesY.current, animated: true });
+              }}
+              style={styles.promptButton}
+            />
+          </Card>
+        ) : (
         <Card style={styles.summary}>
           <Text style={labelStyle}>Previsto para {monthName}</Text>
           <AmountText cents={pay.totalCents} color={colors.income} style={styles.total} />
@@ -205,8 +254,11 @@ export default function SalaryScreen() {
             É só previsão: aparece em "A receber" no Início e só entra no saldo quando o salário cair na conta.
           </Text>
         </Card>
+        )}
 
-        <SectionHeader title="Calendário" />
+        <FoldHeader title="Calendário" summary={pattern ? `Escala ${pattern[0]}x${pattern[1]}` : `${settings.cycle.filter(Boolean).length} de ${settings.cycle.length} dias de trabalho`} open={open.calendar} onToggle={() => toggleSection('calendar')} />
+        {open.calendar ? (
+        <>
         <View style={[styles.modeSelector, { backgroundColor: colors.surface }]}>
           {(['cycle', 'days'] as Mode[]).map((item) => {
             const active = item === mode;
@@ -302,7 +354,14 @@ export default function SalaryScreen() {
           }}
         />
 
-        <SectionHeader title="Valores" />
+        </>
+        ) : null}
+
+        <View onLayout={(event) => { valuesY.current = event.nativeEvent.layout.y; }}>
+          <FoldHeader title="Valores" summary={hasRate ? `R$ ${formatAmountInput(String(settings.hourlyRateCents))} por hora` : 'Falta o valor da hora'} open={open.values} onToggle={() => toggleSection('values')} />
+        </View>
+        {open.values ? (
+        <>
         <View style={styles.fieldRow}>
           {moneyField('Valor da hora (R$)', settings.hourlyRateCents, (cents) => save({ hourlyRateCents: cents }))}
           {percentField('% que cai no dia 15', settings.firstPaymentPercent, 100, (value) => save({ firstPaymentPercent: value }))}
@@ -347,11 +406,10 @@ export default function SalaryScreen() {
               <Text style={[styles.holidayName, { color: colors.text, fontFamily: fonts.medium }]}>Atestado tira a assiduidade</Text>
               <Text style={[styles.meta, { color: colors.textMuted, fontFamily: fonts.regular }]}>Ligue se na sua empresa o atestado também faz perder o prêmio.</Text>
             </View>
-            <Switch
+            <Toggle
               accessibilityLabel="Atestado tira a assiduidade"
               value={settings.sickLosesBonus}
               onValueChange={(value) => save({ sickLosesBonus: value })}
-              trackColor={{ true: colors.primary, false: colors.border }}
             />
           </View>
         </Card>
@@ -363,7 +421,17 @@ export default function SalaryScreen() {
           O salário conta todos os dias do mês (trabalho e folga): dias do mês × jornada × valor da hora. Cada falta tira 1 jornada. Pagamento no dia 15 e no último dia do mês; domingo ou segunda antecipa para o sábado.
         </Text>
 
-        <SectionHeader title={`Feriados de ${monthKey.slice(0, 4)} na sua empresa`} />
+        </>
+        ) : null}
+
+        <FoldHeader
+          title={`Feriados de ${monthKey.slice(0, 4)}`}
+          summary={`${holidayRows.filter((row) => row.counts).length} de ${holidayRows.length} valem`}
+          open={open.holidays}
+          onToggle={() => toggleSection('holidays')}
+        />
+        {open.holidays ? (
+        <>
         <Card style={styles.holidayList}>
           {holidayRows.map((holiday, index) => (
             <View key={holiday.name} style={[styles.holidayRow, index > 0 ? { borderTopColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth } : null]}>
@@ -371,11 +439,10 @@ export default function SalaryScreen() {
                 <Text style={[styles.holidayName, { color: colors.text, fontFamily: fonts.medium }]}>{holiday.name}</Text>
                 <Text style={[styles.meta, { color: colors.textMuted, fontFamily: fonts.regular }]}>{holiday.dates.map(shortDate).join(' e ')}</Text>
               </View>
-              <Switch
+              <Toggle
                 accessibilityLabel={`${holiday.name} vale como feriado na empresa`}
                 value={holiday.counts}
                 onValueChange={(value) => save({ holidayChoices: { ...settings.holidayChoices, [holiday.name]: value } })}
-                trackColor={{ true: colors.primary, false: colors.border }}
               />
             </View>
           ))}
@@ -383,6 +450,8 @@ export default function SalaryScreen() {
         <Text style={[styles.hint, { color: colors.textMuted, fontFamily: fonts.regular }]}>
           Desligado, o dia vira dia comum da escala (sem adicional). Carnaval e Corpus Christi são ponto facultativo e começam desligados.
         </Text>
+        </>
+        ) : null}
       </ScrollView>
     </Screen>
   );
@@ -426,4 +495,9 @@ const styles = StyleSheet.create({
   holidayRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
   holidayInfo: { flex: 1 },
   holidayName: { fontSize: 13 },
+  fold: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 },
+  foldTitle: { fontSize: 17 },
+  foldSummary: { flex: 1, fontSize: 12, textAlign: 'right' },
+  promptTitle: { fontSize: 18 },
+  promptButton: { marginTop: 8 },
 });

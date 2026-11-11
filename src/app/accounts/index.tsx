@@ -9,8 +9,9 @@ import { EmptyState } from '@/components/EmptyState';
 import { IconButton } from '@/components/IconButton';
 import { Screen } from '@/components/Screen';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import { SectionHeader } from '@/components/SectionHeader';
 import { useFinance } from '@/features/finance/FinanceContext';
-import { getAccountBalance, getTotalBalance } from '@/features/finance/selectors';
+import { getAccountBalance, getTotalBalance, isLiability } from '@/features/finance/selectors';
 import type { AccountType } from '@/features/finance/types';
 import { useAppTheme } from '@/theme/AppTheme';
 
@@ -27,6 +28,11 @@ export default function AccountsScreen() {
   const { accounts, transactions } = useFinance();
   const { colors, fonts } = useAppTheme();
   const router = useRouter();
+  // Contas com dinheiro primeiro; cartões e empréstimos (dívidas, fora do saldo) à parte.
+  const groups = [
+    { title: 'Contas', items: accounts.filter((account) => !isLiability(account)) },
+    { title: 'Cartões e empréstimos', items: accounts.filter(isLiability) },
+  ].filter((group) => group.items.length > 0);
 
   return (
     <Screen>
@@ -43,27 +49,38 @@ export default function AccountsScreen() {
             <EmptyState icon="wallet-outline" title="Nenhuma conta ainda" description="Crie sua primeira conta para começar a organizar seu dinheiro." actionLabel="Criar conta" onAction={() => router.push('/accounts/new')} />
           </Card>
         ) : (
-          <View style={styles.list}>
-            {accounts.map((account) => {
-              const transactionCount = transactions.filter((transaction) => transaction.accountId === account.id).length;
-              return (
-                <Pressable key={account.id} accessibilityRole="button" accessibilityLabel={`Editar conta ${account.name}`} onPress={() => router.push(`/accounts/${account.id}/edit`)} style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}>
-                  <Card style={styles.accountCard}>
-                    <AccountLogo color={account.color} icon={account.icon} logoUrl={accountLogoUrl(account)} />
-                    <View style={styles.accountContent}>
-                      <Text style={[styles.institution, { color: colors.textMuted, fontFamily: fonts.regular }]}>{account.institution}</Text>
-                      <Text style={[styles.accountName, { color: colors.text, fontFamily: fonts.semiBold }]}>{account.name}</Text>
-                      <Text style={[styles.accountMeta, { color: colors.textMuted, fontFamily: fonts.regular }]}>{typeLabels[account.type]} · {transactionCount} transações</Text>
-                    </View>
-                    <View style={styles.balanceContainer}>
+          groups.map((group) => (
+            <View key={group.title} style={styles.group}>
+              <SectionHeader title={group.title} />
+              <Card style={styles.groupCard}>
+                {group.items.map((account, index) => {
+                  const transactionCount = transactions.filter((transaction) => transaction.accountId === account.id).length;
+                  return (
+                    <Pressable
+                      key={account.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Editar conta ${account.name}`}
+                      onPress={() => router.push(`/accounts/${account.id}/edit`)}
+                      style={({ pressed }) => [
+                        styles.accountRow,
+                        { borderBottomColor: colors.border, borderBottomWidth: index < group.items.length - 1 ? StyleSheet.hairlineWidth : 0, opacity: pressed ? 0.65 : 1 },
+                      ]}
+                    >
+                      <AccountLogo color={account.color} icon={account.icon} logoUrl={accountLogoUrl(account)} />
+                      <View style={styles.accountContent}>
+                        <Text numberOfLines={1} style={[styles.accountName, { color: colors.text, fontFamily: fonts.semiBold }]}>{account.name}</Text>
+                        <Text numberOfLines={2} style={[styles.accountMeta, { color: colors.textMuted, fontFamily: fonts.regular }]}>
+                          {account.institution} · {typeLabels[account.type]} · {transactionCount} {transactionCount === 1 ? 'transação' : 'transações'}
+                        </Text>
+                      </View>
                       <AmountText cents={getAccountBalance(account, transactions)} style={styles.balance} />
-                      <Ionicons name="chevron-forward" size={16} color={colors.textMuted} style={styles.chevron} />
-                    </View>
-                  </Card>
-                </Pressable>
-              );
-            })}
-          </View>
+                      <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                    </Pressable>
+                  );
+                })}
+              </Card>
+            </View>
+          ))
         )}
         <Text style={[styles.note, { color: colors.textMuted, fontFamily: fonts.regular }]}>Toque em uma conta para editar seus dados ou saldo inicial.</Text>
       </ScrollView>
@@ -78,14 +95,12 @@ const styles = StyleSheet.create({
   totalValue: { fontSize: 32, letterSpacing: -1, marginTop: 10 },
   totalCaption: { fontSize: 11, marginTop: 12 },
   emptyCard: { marginTop: 18 },
-  list: { gap: 11, marginTop: 22 },
-  accountCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 },
+  group: { marginTop: 22 },
+  groupCard: { paddingTop: 4, paddingBottom: 4 },
+  accountRow: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
   accountContent: { flex: 1, minWidth: 0 },
-  institution: { fontSize: 10 },
-  accountName: { fontSize: 14, marginTop: 3 },
-  accountMeta: { fontSize: 10, marginTop: 5 },
-  balanceContainer: { alignItems: 'flex-end' },
-  balance: { fontSize: 12 },
-  chevron: { marginTop: 7 },
+  accountName: { fontSize: 14 },
+  accountMeta: { fontSize: 11, marginTop: 4 },
+  balance: { fontSize: 13 },
   note: { fontSize: 11, textAlign: 'center', marginTop: 22 },
 });

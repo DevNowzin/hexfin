@@ -91,7 +91,7 @@ export function CashFlowChart({ points }: CashFlowChartProps) {
 
 const styles = StyleSheet.create({
   summary: { marginBottom: 20 },
-  month: { fontSize: 13, marginBottom: 10, textTransform: 'capitalize' },
+  month: { fontSize: 13, marginBottom: 10 },
   summaryRow: { flexDirection: 'row', gap: 24 },
   summaryItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   dot: { width: 7, height: 7, borderRadius: 4 },

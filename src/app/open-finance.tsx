@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Toggle } from '@/components/Toggle';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Screen } from '@/components/Screen';
@@ -43,6 +44,7 @@ export default function OpenFinanceScreen() {
   const [message, setMessage] = useState<{ text: string; tone: 'error' | 'ok' } | null>(null);
   const [busy, setBusy] = useState<'saving' | 'syncing' | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
+  const hasSaved = Boolean(settings.clientId || settings.clientSecret || settings.itemIds.length > 0);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -142,7 +144,7 @@ export default function OpenFinanceScreen() {
               setClientId(value);
               setMessage(null);
             }}
-            placeholder="00000000-0000-0000-0000-000000000000"
+            placeholder="Cole o Client ID"
             placeholderTextColor={colors.textMuted}
             autoCapitalize="none"
             autoCorrect={false}
@@ -188,15 +190,13 @@ export default function OpenFinanceScreen() {
             <Text style={[styles.consent, { color: colors.text, fontFamily: fonts.regular }]}>
               Autorizo o HexFin a buscar no Pluggy minhas contas, cartões, empréstimos e as transações dos últimos {SYNC_WINDOW_DAYS} dias. Os dados ficam só neste aparelho.
             </Text>
-            <Switch
+            <Toggle
               accessibilityLabel="Autorizar busca no Open Finance"
               value={Boolean(consentedAt)}
               onValueChange={(on) => {
                 setConsentedAt(on ? new Date().toISOString() : undefined);
                 setMessage(null);
               }}
-              trackColor={{ false: colors.surfaceElevated, true: colors.primary }}
-              thumbColor={consentedAt ? colors.primaryText : colors.textMuted}
             />
           </View>
         </Card>
@@ -225,20 +225,22 @@ export default function OpenFinanceScreen() {
           <Text style={hintStyle}>A categoria que você mudar numa transação importada é mantida nas próximas sincronizações. O MeuPluggy atualiza os bancos uma vez por dia.</Text>
         </Card>
 
-        <Button
-          label="Remover conexão"
-          icon="trash-outline"
-          variant="ghost"
-          disabled={busy !== null}
-          onPress={() =>
-            confirmAction('Remover a conexão?', 'O Client ID, o Client Secret e os Item IDs serão apagados deste aparelho. As contas e transações já importadas continuam no app.', 'Remover', () => {
-              clear()
-                .then(() => setMessage({ text: 'Conexão removida.', tone: 'ok' }))
-                .catch(() => setMessage({ text: 'Não foi possível remover. Tente de novo.', tone: 'error' }));
-            })
-          }
-          style={styles.spaced}
-        />
+        {hasSaved ? (
+          <Button
+            label="Remover conexão"
+            icon="trash-outline"
+            variant="ghost"
+            disabled={busy !== null}
+            onPress={() =>
+              confirmAction('Remover a conexão?', 'O Client ID, o Client Secret e os Item IDs serão apagados deste aparelho. As contas e transações já importadas continuam no app.', 'Remover', () => {
+                clear()
+                  .then(() => setMessage({ text: 'Conexão removida.', tone: 'ok' }))
+                  .catch(() => setMessage({ text: 'Não foi possível remover. Tente de novo.', tone: 'error' }));
+              })
+            }
+            style={styles.spaced}
+          />
+        ) : null}
       </ScrollView>
     </Screen>
   );
