@@ -11,12 +11,14 @@ import { CashFlowChart } from '@/components/CashFlowChart';
 import { CategoryBreakdown } from '@/components/CategoryBreakdown';
 import { GlowBackground } from '@/components/GlowBackground';
 import { IconButton } from '@/components/IconButton';
+import { PressableScale } from '@/components/PressableScale';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { Screen } from '@/components/Screen';
 import { SectionHeader } from '@/components/SectionHeader';
 import { TransactionItem } from '@/components/TransactionItem';
 import { getMonthAhead } from '@/features/finance/ahead';
 import { BillConfirmations } from '@/features/finance/BillConfirmations';
+import { InvestmentConcepts } from '@/features/finance/InvestmentConcepts';
 import { visibleInsights } from '@/features/finance/assistants';
 import { useFinance } from '@/features/finance/FinanceContext';
 import {
@@ -216,22 +218,24 @@ export default function HomeScreen() {
             </Card>
           )}
 
+          {segment === 'investments' ? <InvestmentConcepts /> : null}
+
           {transactions.length > 0 || bills.length > 0 ? (
             <View style={styles.summaryRow}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Ver o que vou receber" onPress={() => router.push('/ahead?side=receivable')} style={styles.summaryPress}>
+              <PressableScale accessibilityRole="button" accessibilityLabel="Ver o que vou receber" onPress={() => router.push('/ahead?side=receivable')} style={styles.summaryPress}>
                 <Card style={styles.summaryCard}>
                   <Text style={[styles.summaryLabel, { color: colors.textMuted, fontFamily: fonts.regular }]}>A receber até {untilLabel}</Text>
                   <AmountText cents={ahead.receivableCents} color={ahead.receivable.length > 0 ? colors.income : colors.textMuted} style={styles.summaryValue} />
                   <Text style={[styles.summaryLabel, { color: colors.textMuted, fontFamily: fonts.regular }]}>{countLabel(ahead.receivable.length)}</Text>
                 </Card>
-              </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Ver o que vou pagar" onPress={() => router.push('/ahead?side=payable')} style={styles.summaryPress}>
+              </PressableScale>
+              <PressableScale accessibilityRole="button" accessibilityLabel="Ver o que vou pagar" onPress={() => router.push('/ahead?side=payable')} style={styles.summaryPress}>
                 <Card style={styles.summaryCard}>
                   <Text style={[styles.summaryLabel, { color: colors.textMuted, fontFamily: fonts.regular }]}>A pagar</Text>
                   <AmountText cents={ahead.payableCents} color={ahead.payable.length > 0 ? colors.expense : colors.textMuted} style={styles.summaryValue} />
                   <Text style={[styles.summaryLabel, { color: colors.textMuted, fontFamily: fonts.regular }]}>{countLabel(ahead.payable.length)}</Text>
                 </Card>
-              </Pressable>
+              </PressableScale>
             </View>
           ) : null}
 

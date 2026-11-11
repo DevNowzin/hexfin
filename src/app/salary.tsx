@@ -1,10 +1,10 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useRef, useState } from 'react';
 import { Pressable, ScrollView, type ScrollViewInstance, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Toggle } from '@/components/Toggle';
 import { AmountText } from '@/components/AmountText';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { FoldChevron } from '@/components/FoldChevron';
 import { MonthSelector } from '@/components/MonthSelector';
 import { Screen } from '@/components/Screen';
 import { ScreenHeader } from '@/components/ScreenHeader';
@@ -66,7 +66,7 @@ function FoldHeader({ title, summary, open, onToggle }: FoldHeaderProps) {
     >
       <Text style={[styles.foldTitle, { color: colors.text, fontFamily: fonts.semiBold }]}>{title}</Text>
       {summary ? <Text numberOfLines={1} style={[styles.foldSummary, { color: colors.textMuted, fontFamily: fonts.regular }]}>{summary}</Text> : null}
-      <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
+      <FoldChevron open={open} />
     </Pressable>
   );
 }
